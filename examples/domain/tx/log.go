@@ -3,8 +3,6 @@ package tx
 import (
 	"context"
 	"fmt"
-
-	"github.com/mat-sik/saga-go/saga"
 )
 
 type LogExistenceChecker interface {
@@ -40,21 +38,11 @@ func NewLogSagaAction(
 	}
 }
 
-func (l LogSagaAction) Execute(ctx context.Context, tx saga.Transaction) error {
-	registerCommand, ok := tx.(RegisterCommand)
-	if !ok {
-		return fmt.Errorf("unexpected transaction type '%T", tx)
-	}
-
+func (l LogSagaAction) Execute(ctx context.Context, registerCommand RegisterCommand) error {
 	return l.insert(ctx, registerCommand, l.logInserter.Insert)
 }
 
-func (l LogSagaAction) Compensate(ctx context.Context, tx saga.CompensatingTransaction) error {
-	unregisterCommand, ok := tx.(UnregisterCommand)
-	if !ok {
-		return fmt.Errorf("unexpected transaction type '%T", tx)
-	}
-
+func (l LogSagaAction) Compensate(ctx context.Context, unregisterCommand UnregisterCommand) error {
 	return l.insert(ctx, unregisterCommand.RegisterCommand, l.compensatingLogInserter.Insert)
 }
 

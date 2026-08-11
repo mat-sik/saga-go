@@ -2,8 +2,6 @@ package tx
 
 import (
 	"context"
-
-	"github.com/mat-sik/saga-go/saga"
 )
 
 type Action struct {
@@ -24,24 +22,24 @@ func NewAction(
 	}
 }
 
-func (a Action) Execute(ctx context.Context, tx saga.Transaction) error {
+func (a Action) Execute(ctx context.Context, registerCommand RegisterCommand) error {
 	return a.unitOfWork(ctx, func(ctx context.Context) error {
-		if err := a.aggregateSagaAction.Execute(ctx, tx); err != nil {
+		if err := a.aggregateSagaAction.Execute(ctx, registerCommand); err != nil {
 			return err
 		}
-		if err := a.logSagaAction.Execute(ctx, tx); err != nil {
+		if err := a.logSagaAction.Execute(ctx, registerCommand); err != nil {
 			return err
 		}
 		return nil
 	})
 }
 
-func (a Action) Compensate(ctx context.Context, tx saga.CompensatingTransaction) error {
+func (a Action) Compensate(ctx context.Context, unregisterCommand UnregisterCommand) error {
 	return a.unitOfWork(ctx, func(ctx context.Context) error {
-		if err := a.aggregateSagaAction.Compensate(ctx, tx); err != nil {
+		if err := a.aggregateSagaAction.Compensate(ctx, unregisterCommand); err != nil {
 			return err
 		}
-		if err := a.logSagaAction.Compensate(ctx, tx); err != nil {
+		if err := a.logSagaAction.Compensate(ctx, unregisterCommand); err != nil {
 			return err
 		}
 		return nil

@@ -3,8 +3,6 @@ package tx
 import (
 	"context"
 	"fmt"
-
-	"github.com/mat-sik/saga-go/saga"
 )
 
 type UnitOfWork func(ctx context.Context, fn func(ctx context.Context) error) error
@@ -39,19 +37,11 @@ func NewAggregateSagaAction(
 	}
 }
 
-func (a AggregateSagaAction) Execute(ctx context.Context, tx saga.Transaction) error {
-	registerCommand, ok := tx.(RegisterCommand)
-	if !ok {
-		return fmt.Errorf("unexpected transaction type '%T", tx)
-	}
+func (a AggregateSagaAction) Execute(ctx context.Context, registerCommand RegisterCommand) error {
 	return a.aggregateSagaExecutor.execute(ctx, registerCommand)
 }
 
-func (a AggregateSagaAction) Compensate(ctx context.Context, tx saga.CompensatingTransaction) error {
-	unregisterCommand, ok := tx.(UnregisterCommand)
-	if !ok {
-		return fmt.Errorf("unexpected transaction type '%T", tx)
-	}
+func (a AggregateSagaAction) Compensate(ctx context.Context, unregisterCommand UnregisterCommand) error {
 	return a.aggregateSagaCompensator.compensate(ctx, unregisterCommand)
 }
 

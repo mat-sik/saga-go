@@ -4,3 +4,5 @@ github.com/mat-sik/saga-go/saga v0.0.0-20260809173658-2c37862cd40d h1:G/kcxmR20a
 github.com/mat-sik/saga-go/saga v0.0.0-20260809173658-2c37862cd40d/go.mod h1:TpNo/b7Urqv9GDBkXY7uCF27qospPe3MCLyHUFv23Q0=
 github.com/mat-sik/saga-go/saga v0.0.0-20260810190912-c90239d7b017 h1:+BHGgpZLSvylwl0k30xQI+4P3RHRMrqGamoir1Zvsb4=
 github.com/mat-sik/saga-go/saga v0.0.0-20260810190912-c90239d7b017/go.mod h1:TpNo/b7Urqv9GDBkXY7uCF27qospPe3MCLyHUFv23Q0=
+github.com/mat-sik/saga-go/saga v0.0.0-20260811203447-0d58160c65ab h1:qwuxlf60DK8YTn1q2srVyKo4YsMdEyJANs2G/xAUF3A=
+github.com/mat-sik/saga-go/saga v0.0.0-20260811203447-0d58160c65ab/go.mod h1:TpNo/b7Urqv9GDBkXY7uCF27qospPe3MCLyHUFv23Q0=
