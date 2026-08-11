@@ -2,7 +2,6 @@ package tx
 
 import (
 	"context"
-	"fmt"
 )
 
 type LogExistenceChecker interface {
@@ -18,20 +17,17 @@ type CompensatingLogInserter interface {
 }
 
 type LogSagaAction struct {
-	UnitOfWork              UnitOfWork
 	logExistenceChecker     LogExistenceChecker
 	logInserter             LogInserter
 	compensatingLogInserter CompensatingLogInserter
 }
 
 func NewLogSagaAction(
-	unitOfWork UnitOfWork,
 	logExistenceChecker LogExistenceChecker,
 	logInserter LogInserter,
 	compensationLogInserter CompensatingLogInserter,
 ) LogSagaAction {
 	return LogSagaAction{
-		UnitOfWork:              unitOfWork,
 		logExistenceChecker:     logExistenceChecker,
 		logInserter:             logInserter,
 		compensatingLogInserter: compensationLogInserter,
@@ -39,25 +35,9 @@ func NewLogSagaAction(
 }
 
 func (l LogSagaAction) Execute(ctx context.Context, registerCommand RegisterCommand) error {
-	return l.insert(ctx, registerCommand, l.logInserter.Insert)
+	return l.logInserter.Insert(ctx, registerCommand)
 }
 
 func (l LogSagaAction) Compensate(ctx context.Context, unregisterCommand UnregisterCommand) error {
-	return l.insert(ctx, unregisterCommand.RegisterCommand, l.compensatingLogInserter.Insert)
-}
-
-func (l LogSagaAction) insert(
-	ctx context.Context,
-	registerCommand RegisterCommand,
-	insertFN func(ctx context.Context, registerCommand RegisterCommand) error,
-) error {
-	return l.UnitOfWork(ctx, func(ctx context.Context) error {
-		if exists, err := l.logExistenceChecker.Check(ctx, registerCommand.RegisterID.ID.TransactionID); err != nil {
-			return fmt.Errorf("checking if tx exists: %w", err)
-		} else if exists {
-			return nil
-		}
-
-		return insertFN(ctx, registerCommand)
-	})
+	return l.compensatingLogInserter.Insert(ctx, unregisterCommand.RegisterCommand)
 }

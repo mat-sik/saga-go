@@ -5,102 +5,36 @@ import (
 	"fmt"
 )
 
-type UnitOfWork func(ctx context.Context, fn func(ctx context.Context) error) error
-
-type AggregateSagaAction struct {
-	aggregateSagaExecutor    aggregateSagaExecutor
-	aggregateSagaCompensator aggregateSagaCompensator
-}
-
-func NewAggregateSagaAction(
-	unitOfWork UnitOfWork,
-	transactionFinalizedChecker TransactionFinalizedChecker,
-	aggregateUpserter AggregateUpserter,
-	aggregateExistenceChecker AggregateExistenceChecker,
-	aggregateValueSubtractor AggregateValueSubtractor,
-) AggregateSagaAction {
-	sagaExecutor := aggregateSagaExecutor{
-		unitOfWork:                  unitOfWork,
-		transactionFinalizedChecker: transactionFinalizedChecker,
-		aggregateUpserter:           aggregateUpserter,
-	}
-
-	sagaCompensator := aggregateSagaCompensator{
-		unitOfWork:                unitOfWork,
-		aggregateExistenceChecker: aggregateExistenceChecker,
-		aggregateValueSubtractor:  aggregateValueSubtractor,
-	}
-
-	return AggregateSagaAction{
-		aggregateSagaExecutor:    sagaExecutor,
-		aggregateSagaCompensator: sagaCompensator,
-	}
-}
-
-func (a AggregateSagaAction) Execute(ctx context.Context, registerCommand RegisterCommand) error {
-	return a.aggregateSagaExecutor.execute(ctx, registerCommand)
-}
-
-func (a AggregateSagaAction) Compensate(ctx context.Context, unregisterCommand UnregisterCommand) error {
-	return a.aggregateSagaCompensator.compensate(ctx, unregisterCommand)
-}
-
 type AggregateUpserter interface {
 	Upsert(ctx context.Context, id RegisterID, value int) error
-}
-
-type TransactionFinalizedChecker interface {
-	Check(ctx context.Context, id string) (bool, error)
-}
-
-type aggregateSagaExecutor struct {
-	unitOfWork                  UnitOfWork
-	transactionFinalizedChecker TransactionFinalizedChecker
-	aggregateUpserter           AggregateUpserter
-}
-
-func (a aggregateSagaExecutor) execute(ctx context.Context, registerCommand RegisterCommand) error {
-	return a.unitOfWork(ctx, func(ctx context.Context) error {
-		return a.UpsertOrAbortIfFinalized(ctx, registerCommand.RegisterID, registerCommand.Value)
-	})
-}
-
-func (a aggregateSagaExecutor) UpsertOrAbortIfFinalized(ctx context.Context, registerID RegisterID, value int) error {
-	if finalized, err := a.transactionFinalizedChecker.Check(ctx, registerID.ID.TransactionID); err != nil {
-		return fmt.Errorf("checking if tx finalized: %w", err)
-	} else if finalized {
-		return nil
-	}
-
-	if err := a.aggregateUpserter.Upsert(ctx, registerID, value); err != nil {
-		return fmt.Errorf("upserting tx: %w", err)
-	}
-
-	return nil
-}
-
-type AggregateExistenceChecker interface {
-	exists(ctx context.Context, id RegisterID) (bool, error)
 }
 
 type AggregateValueSubtractor interface {
 	subtract(ctx context.Context, id RegisterID, value int) error
 }
 
-type aggregateSagaCompensator struct {
-	unitOfWork                UnitOfWork
-	aggregateExistenceChecker AggregateExistenceChecker
-	aggregateValueSubtractor  AggregateValueSubtractor
+type AggregateSagaAction struct {
+	aggregateUpserter        AggregateUpserter
+	aggregateValueSubtractor AggregateValueSubtractor
 }
 
-func (a aggregateSagaCompensator) compensate(ctx context.Context, unregisterCommand UnregisterCommand) error {
-	return a.unitOfWork(ctx, func(ctx context.Context) error {
-		if exists, err := a.aggregateExistenceChecker.exists(ctx, unregisterCommand.RegisterCommand.RegisterID); err != nil {
-			return fmt.Errorf("finding existing aggregate: %w", err)
-		} else if !exists {
-			return nil
-		}
+func NewAggregateSagaAction(
+	aggregateUpserter AggregateUpserter,
+	aggregateValueSubtractor AggregateValueSubtractor,
+) AggregateSagaAction {
+	return AggregateSagaAction{
+		aggregateUpserter:        aggregateUpserter,
+		aggregateValueSubtractor: aggregateValueSubtractor,
+	}
+}
 
-		return a.aggregateValueSubtractor.subtract(ctx, unregisterCommand.RegisterCommand.RegisterID, unregisterCommand.RegisterCommand.Value)
-	})
+func (a AggregateSagaAction) Execute(ctx context.Context, registerCommand RegisterCommand) error {
+	if err := a.aggregateUpserter.Upsert(ctx, registerCommand.RegisterID, registerCommand.Value); err != nil {
+		return fmt.Errorf("upserting tx: %w", err)
+	}
+	return nil
+}
+
+func (a AggregateSagaAction) Compensate(ctx context.Context, unregisterCommand UnregisterCommand) error {
+	return a.aggregateValueSubtractor.subtract(ctx, unregisterCommand.RegisterCommand.RegisterID, unregisterCommand.RegisterCommand.Value)
 }
