@@ -2,42 +2,29 @@ package tx
 
 import (
 	"context"
+	"fmt"
 )
 
-type LogExistenceChecker interface {
-	Check(ctx context.Context, id string) (bool, error)
-}
-
-type LogInserter interface {
-	Insert(ctx context.Context, registerCommand RegisterCommand) error
-}
-
-type CompensatingLogInserter interface {
-	Insert(ctx context.Context, registerCommand RegisterCommand) error
-}
-
 type LogSagaAction struct {
-	logExistenceChecker     LogExistenceChecker
-	logInserter             LogInserter
-	compensatingLogInserter CompensatingLogInserter
+	portOut LogPortOut
 }
 
-func NewLogSagaAction(
-	logExistenceChecker LogExistenceChecker,
-	logInserter LogInserter,
-	compensationLogInserter CompensatingLogInserter,
-) LogSagaAction {
+func NewLogSagaAction(portOut LogPortOut) LogSagaAction {
 	return LogSagaAction{
-		logExistenceChecker:     logExistenceChecker,
-		logInserter:             logInserter,
-		compensatingLogInserter: compensationLogInserter,
+		portOut: portOut,
 	}
 }
 
 func (l LogSagaAction) Execute(ctx context.Context, registerCommand RegisterCommand) error {
-	return l.logInserter.Insert(ctx, registerCommand)
+	if err := l.portOut.InsertLog(ctx, registerCommand); err != nil {
+		return fmt.Errorf("inserting log: %w", err)
+	}
+	return nil
 }
 
 func (l LogSagaAction) Compensate(ctx context.Context, unregisterCommand UnregisterCommand) error {
-	return l.compensatingLogInserter.Insert(ctx, unregisterCommand.RegisterCommand)
+	if err := l.portOut.InsertCompensatingLog(ctx, unregisterCommand.RegisterCommand); err != nil {
+		return fmt.Errorf("inserting compensating log: %w", err)
+	}
+	return nil
 }
