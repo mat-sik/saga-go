@@ -74,7 +74,7 @@ func (c Consumer[ID, TX, CTX]) Consume(ctx context.Context, command Command[ID, 
 		}
 	}
 
-	return fmt.Errorf("command '%v' is not transaction nor compensating transaction", command)
+	return nil
 }
 
 func (c Consumer[ID, TX, CTX]) newSagaActionConsumer(command Command[ID, TX, CTX]) (func(context.Context, Action[TX, CTX]) error, error) {
