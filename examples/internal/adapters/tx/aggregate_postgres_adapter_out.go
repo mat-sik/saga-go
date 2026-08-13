@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mat-sik/saga-go/examples/domain/tx"
-	"github.com/mat-sik/saga-go/examples/txctx"
+	tx2 "github.com/mat-sik/saga-go/examples/internal/domain/tx"
+	"github.com/mat-sik/saga-go/examples/internal/txctx"
 )
 
-var _ tx.AggregatePortOut = (*AggregateRepository)(nil)
+var _ tx2.AggregatePortOut = (*AggregateRepository)(nil)
 
 type AggregateRepository struct{}
 
@@ -17,15 +17,15 @@ func NewAggregateRepository() *AggregateRepository {
 	return &AggregateRepository{}
 }
 
-func (r *AggregateRepository) Upsert(ctx context.Context, id tx.RegisterID, value int) error {
+func (r *AggregateRepository) Upsert(ctx context.Context, id tx2.RegisterID, value int) error {
 	return r.shift(ctx, id, value)
 }
 
-func (r *AggregateRepository) Subtract(ctx context.Context, id tx.RegisterID, value int) error {
+func (r *AggregateRepository) Subtract(ctx context.Context, id tx2.RegisterID, value int) error {
 	return r.shift(ctx, id, -value)
 }
 
-func (r *AggregateRepository) shift(ctx context.Context, id tx.RegisterID, delta int) error {
+func (r *AggregateRepository) shift(ctx context.Context, id tx2.RegisterID, delta int) error {
 	dbTx, err := txctx.FromContext(ctx)
 	if err != nil {
 		return fmt.Errorf("extracting tx from ctx in aggregate repository: %w", err)

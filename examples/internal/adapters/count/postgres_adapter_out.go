@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/mat-sik/saga-go/examples/domain/count"
-	"github.com/mat-sik/saga-go/examples/txctx"
+	"github.com/mat-sik/saga-go/examples/internal/domain/count"
+	"github.com/mat-sik/saga-go/examples/internal/txctx"
 )
 
 var _ count.OutPort = (*Repository)(nil)

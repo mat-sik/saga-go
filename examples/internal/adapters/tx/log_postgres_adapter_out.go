@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mat-sik/saga-go/examples/domain/tx"
-	"github.com/mat-sik/saga-go/examples/txctx"
+	tx2 "github.com/mat-sik/saga-go/examples/internal/domain/tx"
+	"github.com/mat-sik/saga-go/examples/internal/txctx"
 )
 
-var _ tx.LogPortOut = (*LogRepository)(nil)
+var _ tx2.LogPortOut = (*LogRepository)(nil)
 
 type LogRepository struct{}
 
@@ -17,7 +17,7 @@ func NewLogRepository() *LogRepository {
 	return &LogRepository{}
 }
 
-func (r *LogRepository) InsertLog(ctx context.Context, registerCommand tx.RegisterCommand) error {
+func (r *LogRepository) InsertLog(ctx context.Context, registerCommand tx2.RegisterCommand) error {
 	dbTx, err := txctx.FromContext(ctx)
 	if err != nil {
 		return fmt.Errorf("extracting tx from ctx in log repository: %w", err)

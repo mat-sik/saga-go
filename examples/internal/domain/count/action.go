@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mat-sik/saga-go/examples/domain/tx"
+	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
 )
 
 type Action struct {
