@@ -23,7 +23,12 @@ func (l LogSagaAction) Execute(ctx context.Context, registerCommand RegisterComm
 }
 
 func (l LogSagaAction) Compensate(ctx context.Context, unregisterCommand UnregisterCommand) error {
-	if err := l.portOut.InsertCompensatingLog(ctx, unregisterCommand.RegisterCommand); err != nil {
+	if err := l.portOut.InsertCompensatingLog(
+		ctx,
+		unregisterCommand.ID,
+		unregisterCommand.RegisterCommand.RegisterID.ID.TransactionID,
+		unregisterCommand.Time,
+	); err != nil {
 		return fmt.Errorf("inserting compensating log: %w", err)
 	}
 	return nil
