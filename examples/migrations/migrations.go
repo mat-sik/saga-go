@@ -11,7 +11,7 @@ import (
 )
 
 func Run(pool *pgxpool.Pool) error {
-	return run(pool, "db-schema/migrations")
+	return run(pool, "db/migrations")
 }
 
 func run(pool *pgxpool.Pool, dir string) (err error) {
