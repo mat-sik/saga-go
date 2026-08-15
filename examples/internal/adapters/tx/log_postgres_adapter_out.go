@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	tx2 "github.com/mat-sik/saga-go/examples/internal/domain/tx"
+	domain "github.com/mat-sik/saga-go/examples/internal/domain/tx"
 	"github.com/mat-sik/saga-go/examples/internal/txctx"
 )
 
@@ -15,7 +15,7 @@ func NewLogRepository() *LogRepository {
 	return &LogRepository{}
 }
 
-func (r *LogRepository) InsertLog(ctx context.Context, registerCommand tx2.RegisterCommand) error {
+func (r *LogRepository) InsertLog(ctx context.Context, registerCommand domain.RegisterCommand) error {
 	dbTx, err := txctx.FromContext(ctx)
 	if err != nil {
 		return fmt.Errorf("extracting tx from ctx in log repository: %w", err)
@@ -29,17 +29,24 @@ func (r *LogRepository) InsertLog(ctx context.Context, registerCommand tx2.Regis
 		INSERT INTO transaction_logs (transaction_id, player_id, currency, day, value, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`
-	if _, err = dbTx.Exec(
-		ctx,
-		query,
-		id.ID.TransactionID,
-		id.ID.PlayerID,
-		id.ID.Currency,
+
+	transactionID := id.ID.TransactionID
+	playerID := id.ID.PlayerID
+	currency := id.ID.Currency
+	value := registerCommand.Value
+
+	if _, err = dbTx.Exec(ctx, query,
+		transactionID,
+		playerID,
+		currency,
 		day,
-		registerCommand.Value,
+		value,
 		eventTime,
 	); err != nil {
-		return fmt.Errorf("inserting transaction log: %w", err)
+		return fmt.Errorf(
+			"inserting transaction log '(%s, %s, %s, %s, %d, %s)': %w",
+			transactionID, playerID, currency, day, value, eventTime, err,
+		)
 	}
 	return nil
 }
@@ -59,8 +66,14 @@ func (r *LogRepository) InsertCompensatingLog(
 		INSERT INTO compensating_transaction_logs (transaction_id, compensated_transaction_id, created_at)
 		VALUES ($1, $2, $3)
 	`
-	if _, err = dbTx.Exec(ctx, query, transactionID, compensatedTransactionID, createdAt.UTC()); err != nil {
-		return fmt.Errorf("inserting compensating transaction log: %w", err)
+
+	eventTime := createdAt.UTC()
+
+	if _, err = dbTx.Exec(ctx, query, transactionID, compensatedTransactionID, eventTime); err != nil {
+		return fmt.Errorf(
+			"inserting compensating transaction log '(%s, %s, %s)': %w",
+			transactionID, compensatedTransactionID, eventTime, err,
+		)
 	}
 	return nil
 }

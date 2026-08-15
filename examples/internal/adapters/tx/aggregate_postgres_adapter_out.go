@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	tx2 "github.com/mat-sik/saga-go/examples/internal/domain/tx"
+	domain "github.com/mat-sik/saga-go/examples/internal/domain/tx"
 	"github.com/mat-sik/saga-go/examples/internal/txctx"
 )
 
@@ -15,15 +15,15 @@ func NewAggregateRepository() *AggregateRepository {
 	return &AggregateRepository{}
 }
 
-func (r *AggregateRepository) Upsert(ctx context.Context, id tx2.RegisterID, value int) error {
+func (r *AggregateRepository) Upsert(ctx context.Context, id domain.RegisterID, value int) error {
 	return r.shift(ctx, id, value)
 }
 
-func (r *AggregateRepository) Subtract(ctx context.Context, id tx2.RegisterID, value int) error {
+func (r *AggregateRepository) Subtract(ctx context.Context, id domain.RegisterID, value int) error {
 	return r.shift(ctx, id, -value)
 }
 
-func (r *AggregateRepository) shift(ctx context.Context, id tx2.RegisterID, delta int) error {
+func (r *AggregateRepository) shift(ctx context.Context, id domain.RegisterID, delta int) error {
 	dbTx, err := txctx.FromContext(ctx)
 	if err != nil {
 		return fmt.Errorf("extracting tx from ctx in aggregate repository: %w", err)
@@ -35,19 +35,23 @@ func (r *AggregateRepository) shift(ctx context.Context, id tx2.RegisterID, delt
 		ON CONFLICT (player_id, currency, day)
 		DO UPDATE SET value = transactions_aggregates.value + $4, updated_at = $5
 	`
+
+	playerID := id.ID.PlayerID
+	currency := id.ID.Currency
 	eventTime := id.Time.UTC()
 	day := eventTime.Truncate(24 * time.Hour)
 
-	if _, err = dbTx.Exec(
-		ctx,
-		query,
-		id.ID.PlayerID,
-		id.ID.Currency,
+	if _, err = dbTx.Exec(ctx, query,
+		playerID,
+		currency,
 		day,
 		delta,
 		eventTime,
 	); err != nil {
-		return fmt.Errorf("upserting aggregate: %w", err)
+		return fmt.Errorf(
+			"upserting aggregate '(%s, %s, %s)' delta '%d' eventTime '%s': %w",
+			playerID, currency, day, delta, eventTime, err,
+		)
 	}
 	return nil
 }
