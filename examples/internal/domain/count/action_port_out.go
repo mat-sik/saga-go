@@ -2,7 +2,7 @@ package count
 
 import "context"
 
-type OutPort interface {
+type PortOut interface {
 	Increment(ctx context.Context) error
 	Decrement(ctx context.Context) error
 }

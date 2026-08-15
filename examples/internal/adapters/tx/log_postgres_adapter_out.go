@@ -9,8 +9,6 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/txctx"
 )
 
-var _ tx2.LogPortOut = (*LogRepository)(nil)
-
 type LogRepository struct{}
 
 func NewLogRepository() *LogRepository {

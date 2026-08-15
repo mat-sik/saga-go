@@ -9,8 +9,6 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/txctx"
 )
 
-var _ tx2.AggregatePortOut = (*AggregateRepository)(nil)
-
 type AggregateRepository struct{}
 
 func NewAggregateRepository() *AggregateRepository {

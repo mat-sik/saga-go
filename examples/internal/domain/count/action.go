@@ -8,24 +8,24 @@ import (
 )
 
 type Action struct {
-	OutPort OutPort
+	portOut PortOut
 }
 
-func NewAction(outPort OutPort) Action {
+func NewAction(portOut PortOut) Action {
 	return Action{
-		OutPort: outPort,
+		portOut: portOut,
 	}
 }
 
 func (a Action) Execute(ctx context.Context, _ tx.RegisterCommand) error {
-	if err := a.OutPort.Increment(ctx); err != nil {
+	if err := a.portOut.Increment(ctx); err != nil {
 		return fmt.Errorf("incrementing count: %w", err)
 	}
 	return nil
 }
 
 func (a Action) Compensate(ctx context.Context, _ tx.UnregisterCommand) error {
-	if err := a.OutPort.Decrement(ctx); err != nil {
+	if err := a.portOut.Decrement(ctx); err != nil {
 		return fmt.Errorf("decrementing count: %w", err)
 	}
 	return nil
