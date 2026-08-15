@@ -15,48 +15,27 @@ type Command[ID, T, CT any] interface {
 	ToCompensatingTransaction() (CT, bool)
 }
 
-type CommandAlreadyHandledChecker[ID any] interface {
-	Check(id ID) (bool, error)
-}
-
-type TransactionCompensatedChecker[T any] interface {
-	Check(tx T) (bool, error)
-}
-
-type CommandHandledMarker[ID any] interface {
-	Mark(id ID) error
-}
-
 type Consumer[ID, T, CT any] struct {
-	sagaActions                   []Action[T, CT]
-	commandAlreadyHandledChecker  CommandAlreadyHandledChecker[ID]
-	transactionCompensatedChecker TransactionCompensatedChecker[T]
-	commandHandledMarker          CommandHandledMarker[ID]
+	sagaActions []Action[T, CT]
+	portOut     PortOut[ID, T, CT]
 }
 
-func NewConsumer[ID, T, CT any](
-	sagaActions []Action[T, CT],
-	commandAlreadyHandledChecker CommandAlreadyHandledChecker[ID],
-	transactionCompensatedChecker TransactionCompensatedChecker[T],
-	commandHandledMarker CommandHandledMarker[ID],
-) Consumer[ID, T, CT] {
+func NewConsumer[ID, T, CT any](sagaActions []Action[T, CT], portOut PortOut[ID, T, CT]) Consumer[ID, T, CT] {
 	return Consumer[ID, T, CT]{
-		sagaActions:                   sagaActions,
-		commandAlreadyHandledChecker:  commandAlreadyHandledChecker,
-		transactionCompensatedChecker: transactionCompensatedChecker,
-		commandHandledMarker:          commandHandledMarker,
+		sagaActions: sagaActions,
+		portOut:     portOut,
 	}
 }
 
 func (c Consumer[ID, T, CT]) Consume(ctx context.Context, command Command[ID, T, CT]) (err error) {
 	defer func() {
 		if err == nil {
-			err = c.commandHandledMarker.Mark(command.Id())
+			err = c.portOut.MarkCommandAsHandled(command.Id())
 		}
 	}()
 
 	var alreadyHandled bool
-	if alreadyHandled, err = c.commandAlreadyHandledChecker.Check(command.Id()); err != nil {
+	if alreadyHandled, err = c.portOut.CommandAlreadyHandled(command.Id()); err != nil {
 		return fmt.Errorf("checking if command '%v' handled: %w", command, err)
 	} else if alreadyHandled {
 		return nil
@@ -79,7 +58,7 @@ func (c Consumer[ID, T, CT]) Consume(ctx context.Context, command Command[ID, T,
 
 func (c Consumer[ID, T, CT]) newSagaActionConsumer(command Command[ID, T, CT]) (func(context.Context, Action[T, CT]) error, error) {
 	if tx, ok := command.ToTransaction(); ok {
-		if alreadyCompensated, err := c.transactionCompensatedChecker.Check(tx); err != nil {
+		if alreadyCompensated, err := c.portOut.TransactionCompensated(tx); err != nil {
 			return nil, fmt.Errorf("checking if tx '%v' compensated: %w", tx, err)
 		} else if alreadyCompensated {
 			return nil, nil
