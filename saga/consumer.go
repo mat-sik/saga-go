@@ -30,19 +30,19 @@ func NewConsumer[ID, T, CT any](sagaActions []Action[T, CT], portOut PortOut[ID,
 func (c Consumer[ID, T, CT]) Consume(ctx context.Context, command Command[ID, T, CT]) (err error) {
 	defer func() {
 		if err == nil {
-			err = c.portOut.MarkCommandAsHandled(command.Id())
+			err = c.portOut.MarkCommandAsHandled(ctx, command.Id())
 		}
 	}()
 
 	var alreadyHandled bool
-	if alreadyHandled, err = c.portOut.CommandAlreadyHandled(command.Id()); err != nil {
+	if alreadyHandled, err = c.portOut.CommandAlreadyHandled(ctx, command.Id()); err != nil {
 		return fmt.Errorf("checking if command '%v' handled: %w", command, err)
 	} else if alreadyHandled {
 		return nil
 	}
 
 	var sagaActionConsumer func(context.Context, Action[T, CT]) error
-	sagaActionConsumer, err = c.newSagaActionConsumer(command)
+	sagaActionConsumer, err = c.newSagaActionConsumer(ctx, command)
 	if sagaActionConsumer == nil || err != nil {
 		return err
 	}
@@ -56,9 +56,9 @@ func (c Consumer[ID, T, CT]) Consume(ctx context.Context, command Command[ID, T,
 	return nil
 }
 
-func (c Consumer[ID, T, CT]) newSagaActionConsumer(command Command[ID, T, CT]) (func(context.Context, Action[T, CT]) error, error) {
+func (c Consumer[ID, T, CT]) newSagaActionConsumer(ctx context.Context, command Command[ID, T, CT]) (func(context.Context, Action[T, CT]) error, error) {
 	if tx, ok := command.ToTransaction(); ok {
-		if alreadyCompensated, err := c.portOut.TransactionCompensated(tx); err != nil {
+		if alreadyCompensated, err := c.portOut.TransactionCompensated(ctx, tx); err != nil {
 			return nil, fmt.Errorf("checking if tx '%v' compensated: %w", tx, err)
 		} else if alreadyCompensated {
 			return nil, nil
