@@ -52,7 +52,7 @@ func (k kafkaSagaConsumer) consumeRecord(ctx context.Context, record *kgo.Record
 
 	ctx = txctx.WithTx(ctx, pgxTx)
 	if err = k.consumer.Consume(ctx, command); err != nil {
-		return fmt.Errorf("consuming command %q: %w", command, err)
+		return fmt.Errorf("consuming command %v: %w", command, err)
 	}
 	return nil
 }
@@ -79,7 +79,7 @@ func mapToCommand(record *kgo.Record) (saga.Command[tx.RegisterCommand, tx.Unreg
 		}
 		return unregisterRecord.toUnregisterCommand(transactionID), nil
 	default:
-		return nil, fmt.Errorf("unsupported cmdType %q", cmdType)
+		return nil, fmt.Errorf("unsupported cmdType %s", cmdType)
 	}
 }
 
@@ -124,7 +124,7 @@ func headerValue(record *kgo.Record, key string) (string, error) {
 			return string(header.Value), nil
 		}
 	}
-	return "", fmt.Errorf("record missing %q header", key)
+	return "", fmt.Errorf("record missing %s header", key)
 }
 
 const (

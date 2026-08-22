@@ -31,7 +31,7 @@ func (c Consumer[T, CT]) Consume(ctx context.Context, command Command[T, CT]) (e
 
 	var alreadyHandled bool
 	if alreadyHandled, err = c.portOut.CommandAlreadyHandled(ctx, command); err != nil {
-		return fmt.Errorf("checking if command '%v' handled: %w", command, err)
+		return fmt.Errorf("checking if command %v handled: %w", command, err)
 	} else if alreadyHandled {
 		return nil
 	}
@@ -54,24 +54,27 @@ func (c Consumer[T, CT]) Consume(ctx context.Context, command Command[T, CT]) (e
 func (c Consumer[T, CT]) newSagaActionConsumer(ctx context.Context, command Command[T, CT]) (func(context.Context, Action[T, CT]) error, error) {
 	if tx, ok := command.ToTransaction(); ok {
 		if alreadyCompensated, err := c.portOut.TransactionCompensated(ctx, tx); err != nil {
-			// TODO: instead of '%v' use %q
-			return nil, fmt.Errorf("checking if tx '%v' compensated: %w", tx, err)
+			return nil, fmt.Errorf("checking if tx %v compensated: %w", tx, err)
 		} else if alreadyCompensated {
 			return nil, nil
 		}
 
 		return func(ctx context.Context, sagaAction Action[T, CT]) error {
-			// TOOD: add error context
-			return sagaAction.Execute(ctx, tx)
+			if err := sagaAction.Execute(ctx, tx); err != nil {
+				return fmt.Errorf("executing tx %v: %w", tx, err)
+			}
+			return nil
 		}, nil
 	}
 
 	if compensatingTx, ok := command.ToCompensatingTransaction(); ok {
 		return func(ctx context.Context, sagaAction Action[T, CT]) error {
-			// TOOD: add error context
-			return sagaAction.Compensate(ctx, compensatingTx)
+			if err := sagaAction.Compensate(ctx, compensatingTx); err != nil {
+				return fmt.Errorf("compensating with %v: %w", command, err)
+			}
+			return nil
 		}, nil
 	}
 
-	return nil, fmt.Errorf("command '%v' is not transaction nor compensating transaction", command)
+	return nil, fmt.Errorf("command %v is not transaction nor compensating transaction", command)
 }

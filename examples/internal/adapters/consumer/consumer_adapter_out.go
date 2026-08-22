@@ -33,7 +33,7 @@ func (r Repository) CommandAlreadyHandled(
 
 	var alreadyHandled bool
 	if err = dbTx.QueryRow(ctx, query, transactionID).Scan(&alreadyHandled); err != nil {
-		return false, fmt.Errorf("querying for already handled transaction '%s': %w", transactionID, err)
+		return false, fmt.Errorf("querying for already handled transaction %s: %w", transactionID, err)
 	}
 	return alreadyHandled, nil
 }
@@ -65,7 +65,7 @@ func (r Repository) MarkCommandAsHandled(
 	}
 
 	if _, err = dbTx.Exec(ctx, query, transactionID, compensatedTransactionID); err != nil {
-		return fmt.Errorf("marking command '%v' as handled: %w", command, err)
+		return fmt.Errorf("marking command %v as handled: %w", command, err)
 	}
 
 	return nil
@@ -78,7 +78,7 @@ func extractIDs(command saga.Command[tx.RegisterCommand, tx.UnregisterCommand]) 
 	if compensatingTransaction, ok := command.ToCompensatingTransaction(); ok {
 		return compensatingTransaction.ID, &compensatingTransaction.RegisterCommand.RegisterID.ID.TransactionID, nil
 	}
-	return "", nil, fmt.Errorf("command '%v' is not transaction nor compensating transaction", command)
+	return "", nil, fmt.Errorf("command %v is not transaction nor compensating transaction", command)
 }
 
 func (r Repository) TransactionCompensated(ctx context.Context, transaction tx.RegisterCommand) (bool, error) {
@@ -95,7 +95,7 @@ func (r Repository) TransactionCompensated(ctx context.Context, transaction tx.R
 
 	var alreadyCompensated bool
 	if err = dbTx.QueryRow(ctx, query, transactionID).Scan(&alreadyCompensated); err != nil {
-		return false, fmt.Errorf("querying for already compensated transaction '%s': %w", transactionID, err)
+		return false, fmt.Errorf("querying for already compensated transaction %s: %w", transactionID, err)
 	}
 	return alreadyCompensated, nil
 }

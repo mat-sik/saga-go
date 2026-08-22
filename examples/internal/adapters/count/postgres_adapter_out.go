@@ -33,7 +33,7 @@ func (r *Repository) shift(ctx context.Context, delta int) error {
 	const updateQuery = `UPDATE counts SET count = count + $1`
 	tag, err := tx.Exec(ctx, updateQuery, delta)
 	if err != nil {
-		return fmt.Errorf("updating count with delta '%d': %w", delta, err)
+		return fmt.Errorf("updating count with delta %d: %w", delta, err)
 	}
 	if tag.RowsAffected() == 0 {
 		if err = r.insert(ctx, tx, delta); err != nil {
@@ -46,7 +46,7 @@ func (r *Repository) shift(ctx context.Context, delta int) error {
 func (r *Repository) insert(ctx context.Context, tx pgx.Tx, delta int) error {
 	const insertQuery = `INSERT INTO counts (count) VALUES ($1)`
 	if _, err := tx.Exec(ctx, insertQuery, delta); err != nil {
-		return fmt.Errorf("inserting count '%d': %w", delta, err)
+		return fmt.Errorf("inserting count %d: %w", delta, err)
 	}
 	return nil
 }

@@ -44,7 +44,7 @@ func (r *LogRepository) InsertLog(ctx context.Context, registerCommand domain.Re
 		eventTime,
 	); err != nil {
 		return fmt.Errorf(
-			"inserting transaction log '(%s, %s, %s, %s, %d, %s)': %w",
+			"inserting transaction log (%s, %s, %s, %s, %d, %s): %w",
 			transactionID, playerID, currency, day, value, eventTime, err,
 		)
 	}
@@ -71,7 +71,7 @@ func (r *LogRepository) InsertCompensatingLog(
 
 	if _, err = dbTx.Exec(ctx, query, transactionID, compensatedTransactionID, eventTime); err != nil {
 		return fmt.Errorf(
-			"inserting compensating transaction log '(%s, %s, %s)': %w",
+			"inserting compensating transaction log (%s, %s, %s): %w",
 			transactionID, compensatedTransactionID, eventTime, err,
 		)
 	}

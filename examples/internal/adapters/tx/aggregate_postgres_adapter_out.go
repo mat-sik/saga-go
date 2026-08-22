@@ -49,7 +49,7 @@ func (r *AggregateRepository) shift(ctx context.Context, id domain.RegisterID, d
 		eventTime,
 	); err != nil {
 		return fmt.Errorf(
-			"upserting aggregate '(%s, %s, %s)' delta '%d' eventTime '%s': %w",
+			"upserting aggregate (%s, %s, %s) delta %d eventTime %s: %w",
 			playerID, currency, day, delta, eventTime, err,
 		)
 	}
