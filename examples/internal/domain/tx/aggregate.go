@@ -5,6 +5,7 @@ import (
 	"fmt"
 )
 
+// TODO: add logic to send information about breeched limit alarm -> this should publish to topic
 type AggregateSagaAction struct {
 	portOut AggregatePortOut
 }

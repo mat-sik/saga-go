@@ -15,6 +15,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+// TODO: add transient and pernament errors in the adapters and domain logic
 func NewKafkaSagaConsumer(
 	seeds []string,
 	consumerGroup string,
