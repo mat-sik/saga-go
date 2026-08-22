@@ -10,11 +10,11 @@ import (
 )
 
 type Consumer struct {
-	client                *kgo.Client
-	dlqProducer           *dlqProducer
-	cancelProcessingStore *cancelProcessingStore
-	recordConsumer        RecordConsumer
-	config                config
+	client           *kgo.Client
+	dlqProducer      *dlqProducer
+	cancelProcessing *cancelProcessingStore
+	recordConsumer   RecordConsumer
+	config           config
 }
 
 func NewConsumer(
@@ -25,7 +25,7 @@ func NewConsumer(
 	recordConsumer RecordConsumer,
 	options ...Option,
 ) (Consumer, error) {
-	cancelStore := newRebalanceCancelStore()
+	cancelProcessing := newCancelProcessingStore()
 
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(seeds...),
@@ -34,7 +34,7 @@ func NewConsumer(
 		kgo.DisableAutoCommit(),
 		kgo.BlockRebalanceOnPoll(),
 		kgo.OnPartitionsCallbackBlocked(func(ctx context.Context, client *kgo.Client) {
-			cancelStore.cancelStored()
+			cancelProcessing.cancel()
 		}),
 	}
 
@@ -44,11 +44,11 @@ func NewConsumer(
 	}
 
 	return Consumer{
-		client:                client,
-		dlqProducer:           newDlqProducer(client, dlqTopic),
-		cancelProcessingStore: cancelStore,
-		recordConsumer:        recordConsumer,
-		config:                newConfig(options...),
+		client:           client,
+		dlqProducer:      newDlqProducer(client, dlqTopic),
+		cancelProcessing: cancelProcessing,
+		recordConsumer:   recordConsumer,
+		config:           newConfig(options...),
 	}, nil
 }
 
@@ -79,8 +79,8 @@ func (c Consumer) pollFetches(ctx context.Context) error {
 	}
 
 	consumerCtx, cancel := context.WithTimeout(ctx, c.config.processingConfig.timeout)
-	c.cancelProcessingStore.store(cancel)
-	defer c.cancelProcessingStore.cancelStored()
+	c.cancelProcessing.store(cancel)
+	defer c.cancelProcessing.cancel()
 
 	if err := consumer.consumeFetches(consumerCtx, fetches); err != nil {
 		return err

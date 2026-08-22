@@ -6,27 +6,26 @@ import (
 )
 
 type cancelProcessingStore struct {
-	mu     sync.Mutex
-	cancel context.CancelFunc
+	mu         sync.Mutex
+	cancelFunc context.CancelFunc
 }
 
-func newRebalanceCancelStore() *cancelProcessingStore {
+func newCancelProcessingStore() *cancelProcessingStore {
 	return &cancelProcessingStore{
-		mu:     sync.Mutex{},
-		cancel: func() {},
+		cancelFunc: func() {},
 	}
 }
 
 func (s *cancelProcessingStore) store(cancel context.CancelFunc) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.cancel = cancel
+	s.cancelFunc = cancel
 }
 
-func (s *cancelProcessingStore) cancelStored() {
+func (s *cancelProcessingStore) cancel() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.cancel != nil {
-		s.cancel()
+	if s.cancelFunc != nil {
+		s.cancelFunc()
 	}
 }
