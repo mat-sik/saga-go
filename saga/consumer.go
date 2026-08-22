@@ -54,18 +54,21 @@ func (c Consumer[T, CT]) Consume(ctx context.Context, command Command[T, CT]) (e
 func (c Consumer[T, CT]) newSagaActionConsumer(ctx context.Context, command Command[T, CT]) (func(context.Context, Action[T, CT]) error, error) {
 	if tx, ok := command.ToTransaction(); ok {
 		if alreadyCompensated, err := c.portOut.TransactionCompensated(ctx, tx); err != nil {
+			// TODO: instead of '%v' use %q
 			return nil, fmt.Errorf("checking if tx '%v' compensated: %w", tx, err)
 		} else if alreadyCompensated {
 			return nil, nil
 		}
 
 		return func(ctx context.Context, sagaAction Action[T, CT]) error {
+			// TOOD: add error context
 			return sagaAction.Execute(ctx, tx)
 		}, nil
 	}
 
 	if compensatingTx, ok := command.ToCompensatingTransaction(); ok {
 		return func(ctx context.Context, sagaAction Action[T, CT]) error {
+			// TOOD: add error context
 			return sagaAction.Compensate(ctx, compensatingTx)
 		}, nil
 	}
