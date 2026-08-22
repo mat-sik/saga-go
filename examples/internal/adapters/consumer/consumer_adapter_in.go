@@ -21,7 +21,7 @@ func NewKafkaConsumer(
 	options ...kafka.Option,
 ) (kafka.Consumer, error) {
 	k := kafkaConsumer{consumer: consumer}
-	return kafka.NewConsumer(seeds, consumerGroup, topic, dlqTopic, k.consumeRecord, options...)
+	return kafka.NewConsumer(seeds, consumerGroup, []string{topic}, dlqTopic, k.consumeRecord, options...)
 }
 
 type kafkaConsumer struct {
