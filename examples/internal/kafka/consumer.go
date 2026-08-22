@@ -71,17 +71,11 @@ func (c Consumer) pollFetches(ctx context.Context) error {
 		return nil
 	}
 
-	consumer := batchConsumer{
-		recordConsumer:               c.recordConsumer,
-		dlqProducer:                  c.dlqProducer,
-		processedEpochOffsetsTracker: newProcessedOffsetsTracker(),
-		backoff:                      c.newBackoff(),
-	}
-
 	consumerCtx, cancel := context.WithTimeout(ctx, c.config.processingConfig.timeout)
 	c.cancelProcessing.store(cancel)
 	defer c.cancelProcessing.cancel()
 
+	consumer := c.newBatchConsumer()
 	if err := consumer.consumeFetches(consumerCtx, fetches); err != nil {
 		return err
 	}
@@ -89,6 +83,15 @@ func (c Consumer) pollFetches(ctx context.Context) error {
 	committable := consumer.processedEpochOffsetsTracker.committableEpochOffsets()
 
 	return c.commitOffsetsSync(ctx, committable)
+}
+
+func (c Consumer) newBatchConsumer() batchConsumer {
+	return batchConsumer{
+		recordConsumer:               c.recordConsumer,
+		dlqProducer:                  c.dlqProducer,
+		processedEpochOffsetsTracker: newProcessedOffsetsTracker(),
+		backoff:                      c.newBackoff(),
+	}
 }
 
 func (c Consumer) newBackoff() *backoff {
