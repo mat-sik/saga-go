@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -63,7 +64,7 @@ func (p *dlqProducer) drain() ([]*kgo.Record, error) {
 			processed = append(processed, result.failedRecord)
 		}
 	}
-	return processed, errors.Join(publishErrs...)
+	return processed, fmt.Errorf("publishing: %w", errors.Join(publishErrs...))
 }
 
 type dlqProduceResult struct {
