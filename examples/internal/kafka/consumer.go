@@ -128,48 +128,42 @@ func (bc batchConsumer) consumeFetches(ctx context.Context, fetches kgo.Fetches)
 
 	var errs []error
 	iter := fetches.RecordIter()
-
-	record := bc.initRecord(iter)
-	if record == nil {
-		return nil
-	}
-
 	for !iter.Done() {
-		if err = ctx.Err(); err != nil {
-			errs = append(errs, fmt.Errorf("consuming fetches: %w", err))
-			return errors.Join(errs...)
-		}
+		record := iter.Next()
 
-		err = bc.recordConsumer(ctx, record)
-		if err == nil {
-			bc.backoff.clear()
-			bc.processedEpochOffsetsTracker.registerAsProcessed(record)
-			record = iter.Next()
-		} else if errors.Is(err, ErrTransient) {
-			if err = bc.backoff.wait(ctx); err != nil {
-				errs = append(errs, err)
-				return errors.Join(errs...)
-			}
-			errs = append(errs, err)
-		} else if errors.Is(err, ErrPermanent) {
-			failed := failedRecord{record: record, cause: err}
-			bc.dlqProducer.produce(ctx, failed)
-			errs = append(errs, err)
-			record = iter.Next()
-		} else {
-			errs = append(errs, newUnclassifiedErr(err))
-			return errors.Join(errs...)
+		errs, err = bc.consumeWithRetry(ctx, record, errs)
+		if err != nil {
+			return errors.Join(append(errs, err)...)
 		}
 	}
 
 	return nil
 }
 
-func (bc batchConsumer) initRecord(iter *kgo.FetchesRecordIter) *kgo.Record {
-	if !iter.Done() {
-		return iter.Next()
+func (bc batchConsumer) consumeWithRetry(ctx context.Context, record *kgo.Record, errs []error) ([]error, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return errs, fmt.Errorf("consuming fetches: %w", err)
+		}
+
+		err := bc.recordConsumer(ctx, record)
+		switch {
+		case err == nil:
+			bc.backoff.clear()
+			bc.processedEpochOffsetsTracker.registerAsProcessed(record)
+			return errs, nil
+		case errors.Is(err, ErrTransient):
+			errs = append(errs, err)
+			if err = bc.backoff.wait(ctx); err != nil {
+				return errs, err
+			}
+		case errors.Is(err, ErrPermanent):
+			bc.dlqProducer.produce(ctx, failedRecord{record: record, cause: err})
+			return append(errs, err), nil
+		default:
+			return errs, newUnclassifiedErr(err)
+		}
 	}
-	return nil
 }
 
 func newUnclassifiedErr(err error) error {
