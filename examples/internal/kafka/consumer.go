@@ -88,19 +88,23 @@ func (c Consumer) pollFetches(ctx context.Context) error {
 
 	committable := consumer.processedEpochOffsetsTracker.committableEpochOffsets()
 
+	return c.commitOffsetsSync(ctx, committable)
+}
+
+func (c Consumer) newBackoff() *backoff {
+	backoffConfiguration := c.config.backoffConfig
+	return newBackoff(backoffConfiguration.base, backoffConfiguration.max, backoffConfiguration.factor)
+}
+
+func (c Consumer) commitOffsetsSync(ctx context.Context, uncommitted map[string]map[int32]kgo.EpochOffset) error {
 	var err error
-	c.client.CommitOffsetsSync(ctx, committable, func(_ *kgo.Client, _ *kmsg.OffsetCommitRequest, _ *kmsg.OffsetCommitResponse, onDoneErr error) {
+	c.client.CommitOffsetsSync(ctx, uncommitted, func(_ *kgo.Client, _ *kmsg.OffsetCommitRequest, _ *kmsg.OffsetCommitResponse, onDoneErr error) {
 		err = onDoneErr
 	})
 	if err != nil {
 		return fmt.Errorf("commiting offsets: %w", err)
 	}
 	return nil
-}
-
-func (c Consumer) newBackoff() *backoff {
-	backoffConfiguration := c.config.backoffConfig
-	return newBackoff(backoffConfiguration.base, backoffConfiguration.max, backoffConfiguration.factor)
 }
 
 type batchConsumer struct {
