@@ -20,7 +20,7 @@ type Consumer struct {
 func NewConsumer(
 	seeds []string,
 	consumerGroup string,
-	topic string,
+	topics []string,
 	dlqTopic string,
 	recordConsumer RecordConsumer,
 	options ...Option,
@@ -30,7 +30,7 @@ func NewConsumer(
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(seeds...),
 		kgo.ConsumerGroup(consumerGroup),
-		kgo.ConsumeTopics(topic),
+		kgo.ConsumeTopics(topics...),
 		kgo.DisableAutoCommit(),
 		kgo.BlockRebalanceOnPoll(),
 		kgo.OnPartitionsCallbackBlocked(func(ctx context.Context, client *kgo.Client) {
