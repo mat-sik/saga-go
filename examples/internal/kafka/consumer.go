@@ -122,78 +122,50 @@ func (bc batchConsumer) consumeFetches(ctx context.Context, fetches kgo.Fetches)
 		bc.processedEpochOffsetsTracker.registerAsProcessed(dlqProcessed...)
 	}()
 
-	var transient []*kgo.Record
 	var errs []error
-
 	iter := fetches.RecordIter()
+
+	record := bc.initRecord(iter)
+	if record == nil {
+		return nil
+	}
+
 	for !iter.Done() {
 		if err = ctx.Err(); err != nil {
 			errs = append(errs, fmt.Errorf("consuming fetches: %w", err))
 			return errors.Join(errs...)
 		}
 
-		record := iter.Next()
-
 		err = bc.recordConsumer(ctx, record)
 		if err == nil {
 			bc.backoff.clear()
 			bc.processedEpochOffsetsTracker.registerAsProcessed(record)
-			continue
+			record = iter.Next()
 		} else if errors.Is(err, ErrTransient) {
-			transient = append(transient, record)
 			if err = bc.backoff.wait(ctx); err != nil {
 				errs = append(errs, err)
 				return errors.Join(errs...)
 			}
+			errs = append(errs, err)
 		} else if errors.Is(err, ErrPermanent) {
 			failed := failedRecord{record: record, cause: err}
 			bc.dlqProducer.produce(ctx, failed)
+			errs = append(errs, err)
+			record = iter.Next()
 		} else {
 			errs = append(errs, newUnclassifiedErr(err))
 			return errors.Join(errs...)
 		}
-
-		errs = append(errs, err)
-	}
-
-	errs, err = bc.retryTransient(ctx, transient, errs)
-	if err != nil {
-		return err
 	}
 
 	return nil
 }
 
-func (bc batchConsumer) retryTransient(ctx context.Context, transient []*kgo.Record, errs []error) ([]error, error) {
-	i := 0
-	for i < len(transient) {
-		if err := ctx.Err(); err != nil {
-			errs = append(errs, fmt.Errorf("retrying transient: %w", err))
-			return errs, errors.Join(errs...)
-		}
-
-		record := transient[i]
-
-		err := bc.recordConsumer(ctx, record)
-		if err == nil {
-			bc.processedEpochOffsetsTracker.registerAsProcessed(record)
-			bc.backoff.clear()
-		} else if errors.Is(err, ErrTransient) {
-			if backoffErr := bc.backoff.wait(ctx); backoffErr != nil {
-				return errs, errors.Join(errs...)
-			}
-			continue
-		} else if errors.Is(err, ErrPermanent) {
-			failed := failedRecord{record: record, cause: err}
-			bc.dlqProducer.produce(ctx, failed)
-		} else {
-			errs = append(errs, newUnclassifiedErr(err))
-			return errs, errors.Join(errs...)
-		}
-
-		i++
+func (bc batchConsumer) initRecord(iter *kgo.FetchesRecordIter) *kgo.Record {
+	if !iter.Done() {
+		return iter.Next()
 	}
-	return errs, nil
+	return nil
 }
 
 func newUnclassifiedErr(err error) error {
