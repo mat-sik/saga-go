@@ -11,21 +11,21 @@ import (
 
 type AggregateRepository struct{}
 
-func NewAggregateRepository() *AggregateRepository {
-	return &AggregateRepository{}
+func NewAggregateRepository() AggregateRepository {
+	return AggregateRepository{}
 }
 
-func (r *AggregateRepository) Upsert(ctx context.Context, id domain.RegisterID, value int) (int, error) {
+func (r AggregateRepository) Upsert(ctx context.Context, id domain.RegisterID, value int) (int, error) {
 	delta := value
 	return r.shift(ctx, id, delta)
 }
 
-func (r *AggregateRepository) Subtract(ctx context.Context, id domain.RegisterID, value int) (int, error) {
+func (r AggregateRepository) Subtract(ctx context.Context, id domain.RegisterID, value int) (int, error) {
 	delta := -value
 	return r.shift(ctx, id, delta)
 }
 
-func (r *AggregateRepository) shift(ctx context.Context, id domain.RegisterID, delta int) (int, error) {
+func (r AggregateRepository) shift(ctx context.Context, id domain.RegisterID, delta int) (int, error) {
 	dbTx, err := txctx.FromContext(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("extracting tx from ctx in aggregate repository: %w", err)

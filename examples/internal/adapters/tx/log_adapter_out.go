@@ -11,11 +11,11 @@ import (
 
 type LogRepository struct{}
 
-func NewLogRepository() *LogRepository {
-	return &LogRepository{}
+func NewLogRepository() LogRepository {
+	return LogRepository{}
 }
 
-func (r *LogRepository) InsertLog(ctx context.Context, registerCommand domain.RegisterCommand) error {
+func (r LogRepository) InsertLog(ctx context.Context, registerCommand domain.RegisterCommand) error {
 	dbTx, err := txctx.FromContext(ctx)
 	if err != nil {
 		return fmt.Errorf("extracting tx from ctx in log repository: %w", err)
@@ -51,7 +51,7 @@ func (r *LogRepository) InsertLog(ctx context.Context, registerCommand domain.Re
 	return nil
 }
 
-func (r *LogRepository) InsertCompensatingLog(
+func (r LogRepository) InsertCompensatingLog(
 	ctx context.Context,
 	transactionID string,
 	compensatedTransactionID string,
