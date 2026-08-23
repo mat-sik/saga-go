@@ -56,10 +56,10 @@ type ClearAlarmRecord struct {
 	PlayerID string `json:"PlayerID"`
 }
 
-type AlarmValueConfigProvider struct {
+type AlarmValueStaticProvider struct {
 	threshold int
 }
 
-func (a AlarmValueConfigProvider) AlarmValue(_ context.Context, _ string) (int, error) {
+func (a AlarmValueStaticProvider) AlarmValue(_ context.Context, _ string) (int, error) {
 	return a.threshold, nil
 }
