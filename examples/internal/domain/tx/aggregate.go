@@ -7,14 +7,14 @@ import (
 
 type AggregateSagaAction struct {
 	portOut            AggregatePortOut
-	alarmValueProvider alarmValueProvider
-	alarmRaiser        alarmRaiser
+	alarmValueProvider AlarmValueProvider
+	alarmRaiser        AlarmRaiser
 }
 
 func NewAggregateSagaAction(
 	portOut AggregatePortOut,
-	alarmValueProvider alarmValueProvider,
-	alarmRaiser alarmRaiser,
+	alarmValueProvider AlarmValueProvider,
+	alarmRaiser AlarmRaiser,
 ) AggregateSagaAction {
 	return AggregateSagaAction{
 		portOut:            portOut,
@@ -59,9 +59,9 @@ func (a AggregateSagaAction) updateAlarmState(ctx context.Context, playerID stri
 	previousValue := updatedValue - deltaValue
 	switch crossing(previousValue, updatedValue, alarmValue) {
 	case crossedBelow:
-		return a.alarmRaiser.ClearAlarm(ctx, playerID)
+		return a.alarmRaiser.clearAlarm(ctx, playerID)
 	case crossedAbove:
-		return a.alarmRaiser.RaiseAlarm(ctx, playerID, alarmValue, updatedValue)
+		return a.alarmRaiser.raiseAlarm(ctx, playerID, alarmValue, updatedValue)
 	default:
 		return nil
 	}

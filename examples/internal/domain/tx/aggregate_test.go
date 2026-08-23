@@ -131,10 +131,10 @@ func TestAggregateSagaAction(t *testing.T) {
 
 			aggregateSagaAction := AggregateSagaAction{
 				portOut: &aggregatePortOut,
-				alarmValueProvider: alarmValueProvider{
+				alarmValueProvider: AlarmValueProvider{
 					portOut: alarmValueProviderPortOut,
 				},
-				alarmRaiser: alarmRaiser{
+				alarmRaiser: AlarmRaiser{
 					portOut: &alarmRaiserPortOut,
 				},
 			}
