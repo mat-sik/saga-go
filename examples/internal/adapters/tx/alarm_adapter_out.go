@@ -8,19 +8,19 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-type AlarmProducer struct {
+type KafkaAlarmProducer struct {
 	client *kgo.Client
 	topic  string
 }
 
-func NewKafkaAlarmProducer(client *kgo.Client, topic string) AlarmProducer {
-	return AlarmProducer{
+func NewKafkaAlarmProducer(client *kgo.Client, topic string) KafkaAlarmProducer {
+	return KafkaAlarmProducer{
 		client: client,
 		topic:  topic,
 	}
 }
 
-func (a AlarmProducer) RaiseAlarm(ctx context.Context, playerID string, alarmValue, value int) error {
+func (a KafkaAlarmProducer) RaiseAlarm(ctx context.Context, playerID string, alarmValue, value int) error {
 	return a.produce(ctx, playerID, RaiseAlarmRecord{
 		PlayerID:   playerID,
 		AlarmValue: alarmValue,
@@ -28,11 +28,11 @@ func (a AlarmProducer) RaiseAlarm(ctx context.Context, playerID string, alarmVal
 	})
 }
 
-func (a AlarmProducer) ClearAlarm(ctx context.Context, playerID string) error {
+func (a KafkaAlarmProducer) ClearAlarm(ctx context.Context, playerID string) error {
 	return a.produce(ctx, playerID, ClearAlarmRecord{PlayerID: playerID})
 }
 
-func (a AlarmProducer) produce(ctx context.Context, playerID string, payload any) error {
+func (a KafkaAlarmProducer) produce(ctx context.Context, playerID string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshaling record %v: %w", payload, err)
