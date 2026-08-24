@@ -78,6 +78,10 @@ func (c Consumer) StartPolling(ctx context.Context) error {
 	}
 }
 
+func (c Consumer) Close() {
+	c.client.Close()
+}
+
 func (c Consumer) pollFetches(ctx context.Context) error {
 	defer c.client.AllowRebalance()
 

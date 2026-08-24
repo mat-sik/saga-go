@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/kafka"
@@ -25,7 +27,8 @@ func main() {
 }
 
 func run() int {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
 
 	conf, err := config.NewTxConsumer(ctx)
 	if err != nil {
@@ -33,19 +36,16 @@ func run() int {
 		return 1
 	}
 
-	var pool *pgxpool.Pool
-	if conf.DatabaseURL != "" {
-		pool, err = pgxpool.New(ctx, conf.DatabaseURL)
-		if err != nil {
-			slog.Error("creating pgx pool", "err", err)
-			return 1
-		}
-		defer pool.Close()
+	pool, err := pgxpool.New(ctx, conf.DatabaseURL)
+	if err != nil {
+		slog.Error("creating pgx pool", "err", err)
+		return 1
+	}
+	defer pool.Close()
 
-		if err = migrations.Run(pool); err != nil {
-			slog.Error("running tx-consumer migrations", "err", err)
-			return 1
-		}
+	if err = migrations.Run(pool); err != nil {
+		slog.Error("running tx-consumer migrations", "err", err)
+		return 1
 	}
 
 	errCh := make(chan error, conf.ConsumerCount)
@@ -61,6 +61,7 @@ func run() int {
 				errCh <- fmt.Errorf("creating consumer: %w", err)
 				return
 			}
+			defer consumer.Close()
 			if err = consumer.StartPolling(ctx); err != nil {
 				errCh <- fmt.Errorf("polling: %w", err)
 				return
@@ -88,11 +89,14 @@ func run() int {
 }
 
 func newConsumer(conf config.TxConsumerConfig, pool *pgxpool.Pool) (kgoconsumer.Consumer, error) {
-	kafkaClient, _ := kgoconsumer.NewClient(
+	kafkaClient, err := kgoconsumer.NewClient(
 		conf.KafkaSeeds,
 		conf.TransactionsTopicConsumerGroup,
 		[]string{conf.TransactionsTopic},
 	)
+	if err != nil {
+		return kgoconsumer.Consumer{}, err
+	}
 
 	aggregateRepository := postgres.NewAggregateRepository()
 	alarmValueProvider := tx.NewAlarmValueProvider(static.NewAlarmValueProvider(conf.AlarmValue))
