@@ -105,7 +105,7 @@ func (c Consumer) pollFetches(ctx context.Context) error {
 
 	committable := consumer.processedEpochOffsetsTracker.committableEpochOffsets()
 
-	return c.commitOffsetsSync(ctx, committable)
+	return c.commitOffsets(ctx, committable)
 }
 
 func (c Consumer) fetchesFatalError(fetches kgo.Fetches) error {
@@ -149,11 +149,12 @@ func (c Consumer) newBackoff() *backoff {
 	return newBackoff(backoffConfiguration.base, backoffConfiguration.max, backoffConfiguration.factor)
 }
 
-func (c Consumer) commitOffsetsSync(ctx context.Context, uncommitted map[string]map[int32]kgo.EpochOffset) error {
+func (c Consumer) commitOffsets(ctx context.Context, uncommitted map[string]map[int32]kgo.EpochOffset) error {
 	var err error
-	c.client.CommitOffsetsSync(ctx, uncommitted, func(_ *kgo.Client, _ *kmsg.OffsetCommitRequest, _ *kmsg.OffsetCommitResponse, onDoneErr error) {
+	collectErr := func(_ *kgo.Client, _ *kmsg.OffsetCommitRequest, _ *kmsg.OffsetCommitResponse, onDoneErr error) {
 		err = onDoneErr
-	})
+	}
+	c.client.CommitOffsetsSync(ctx, uncommitted, collectErr)
 	if err != nil {
 		return fmt.Errorf("commiting offsets: %w", err)
 	}
@@ -210,22 +211,15 @@ func (bc batchConsumer) consumeWithRetry(ctx context.Context, record *kgo.Record
 			if err = bc.backoff.wait(ctx); err != nil {
 				return errs, err
 			}
-		case errors.Is(err, ErrPermanent):
+		default:
 			bc.dlqProducer.produce(ctx, failedRecord{record: record, cause: err})
 			return append(errs, err), nil
-		default:
-			return errs, newUnclassifiedErr(err)
 		}
 	}
-}
-
-func newUnclassifiedErr(err error) error {
-	return fmt.Errorf("unclassified err: %w", err)
 }
 
 type RecordConsumer func(ctx context.Context, record *kgo.Record) error
 
 var (
-	ErrPermanent = errors.New("permanent err")
 	ErrTransient = errors.New("transient err")
 )
