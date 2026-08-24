@@ -1,4 +1,4 @@
-package tx
+package kafka
 
 import (
 	"context"
@@ -8,19 +8,19 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-type KafkaAlarmProducer struct {
+type AlarmProducer struct {
 	client *kgo.Client
 	topic  string
 }
 
-func NewKafkaAlarmProducer(client *kgo.Client, topic string) KafkaAlarmProducer {
-	return KafkaAlarmProducer{
+func NewAlarmProducer(client *kgo.Client, topic string) AlarmProducer {
+	return AlarmProducer{
 		client: client,
 		topic:  topic,
 	}
 }
 
-func (a KafkaAlarmProducer) RaiseAlarm(ctx context.Context, playerID string, alarmValue, value int) error {
+func (a AlarmProducer) RaiseAlarm(ctx context.Context, playerID string, alarmValue, value int) error {
 	return a.produce(ctx, playerID, RaiseAlarmRecord{
 		PlayerID:   playerID,
 		AlarmValue: alarmValue,
@@ -28,11 +28,11 @@ func (a KafkaAlarmProducer) RaiseAlarm(ctx context.Context, playerID string, ala
 	})
 }
 
-func (a KafkaAlarmProducer) ClearAlarm(ctx context.Context, playerID string) error {
+func (a AlarmProducer) ClearAlarm(ctx context.Context, playerID string) error {
 	return a.produce(ctx, playerID, ClearAlarmRecord{PlayerID: playerID})
 }
 
-func (a KafkaAlarmProducer) produce(ctx context.Context, playerID string, payload any) error {
+func (a AlarmProducer) produce(ctx context.Context, playerID string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshaling record %v: %w", payload, err)
@@ -54,12 +54,4 @@ type RaiseAlarmRecord struct {
 
 type ClearAlarmRecord struct {
 	PlayerID string `json:"PlayerID"`
-}
-
-type AlarmValueStaticProvider struct {
-	threshold int
-}
-
-func (a AlarmValueStaticProvider) AlarmValue(_ context.Context, _ string) (int, error) {
-	return a.threshold, nil
 }

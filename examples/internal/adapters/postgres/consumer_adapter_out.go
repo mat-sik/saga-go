@@ -1,4 +1,4 @@
-package consumer
+package postgres
 
 import (
 	"context"
@@ -9,10 +9,14 @@ import (
 	"github.com/mat-sik/saga-go/saga"
 )
 
-type Repository struct {
+type ConsumerRepository struct {
 }
 
-func (r Repository) CommandAlreadyHandled(
+func NewConsumerRepository() ConsumerRepository {
+	return ConsumerRepository{}
+}
+
+func (r ConsumerRepository) CommandAlreadyHandled(
 	ctx context.Context,
 	command saga.Command[tx.RegisterCommand, tx.UnregisterCommand],
 ) (bool, error) {
@@ -43,7 +47,7 @@ func extractTransactionID(command saga.Command[tx.RegisterCommand, tx.Unregister
 	return transactionID, err
 }
 
-func (r Repository) MarkCommandAsHandled(
+func (r ConsumerRepository) MarkCommandAsHandled(
 	ctx context.Context,
 	command saga.Command[tx.RegisterCommand, tx.UnregisterCommand],
 ) error {
@@ -81,7 +85,7 @@ func extractIDs(command saga.Command[tx.RegisterCommand, tx.UnregisterCommand]) 
 	return "", nil, fmt.Errorf("command %v is not transaction nor compensating transaction", command)
 }
 
-func (r Repository) TransactionCompensated(ctx context.Context, transaction tx.RegisterCommand) (bool, error) {
+func (r ConsumerRepository) TransactionCompensated(ctx context.Context, transaction tx.RegisterCommand) (bool, error) {
 	dbTx, err := txctx.FromContext(ctx)
 	if err != nil {
 		return false, fmt.Errorf("extracting tx from ctx in consumer repository: %w", err)

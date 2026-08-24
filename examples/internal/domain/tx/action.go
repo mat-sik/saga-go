@@ -4,22 +4,22 @@ import (
 	"context"
 )
 
-type Action struct {
+type SagaAction struct {
 	logSagaAction       LogSagaAction
 	aggregateSagaAction AggregateSagaAction
 }
 
-func NewAction(
+func NewSagaAction(
 	logSagaAction LogSagaAction,
 	aggregateSagaAction AggregateSagaAction,
-) Action {
-	return Action{
+) SagaAction {
+	return SagaAction{
 		logSagaAction:       logSagaAction,
 		aggregateSagaAction: aggregateSagaAction,
 	}
 }
 
-func (a Action) Execute(ctx context.Context, registerCommand RegisterCommand) error {
+func (a SagaAction) Execute(ctx context.Context, registerCommand RegisterCommand) error {
 	if err := a.aggregateSagaAction.Execute(ctx, registerCommand); err != nil {
 		return err
 	}
@@ -29,7 +29,7 @@ func (a Action) Execute(ctx context.Context, registerCommand RegisterCommand) er
 	return nil
 }
 
-func (a Action) Compensate(ctx context.Context, unregisterCommand UnregisterCommand) error {
+func (a SagaAction) Compensate(ctx context.Context, unregisterCommand UnregisterCommand) error {
 	if err := a.aggregateSagaAction.Compensate(ctx, unregisterCommand); err != nil {
 		return err
 	}

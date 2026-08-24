@@ -14,6 +14,10 @@ type Client struct {
 	kgoClient        *kgo.Client
 }
 
+func (c Client) ToKgo() *kgo.Client {
+	return c.kgoClient
+}
+
 func NewClient(seeds []string, consumerGroup string, topics []string) (Client, error) {
 	cancelProcessing := newCancelProcessingStore()
 
@@ -30,7 +34,7 @@ func NewClient(seeds []string, consumerGroup string, topics []string) (Client, e
 
 	client, err := kgo.NewClient(opts...)
 	if err != nil {
-		return Client{}, fmt.Errorf("creating new franz-go client: %w", err)
+		return Client{}, fmt.Errorf("creating franz-go client: %w", err)
 	}
 
 	return Client{

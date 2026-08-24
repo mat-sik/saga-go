@@ -7,24 +7,24 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
 )
 
-type Action struct {
+type SagaAction struct {
 	portOut PortOut
 }
 
-func NewAction(portOut PortOut) Action {
-	return Action{
+func NewSagaAction(portOut PortOut) SagaAction {
+	return SagaAction{
 		portOut: portOut,
 	}
 }
 
-func (a Action) Execute(ctx context.Context, _ tx.RegisterCommand) error {
+func (a SagaAction) Execute(ctx context.Context, _ tx.RegisterCommand) error {
 	if err := a.portOut.Increment(ctx); err != nil {
 		return fmt.Errorf("incrementing count: %w", err)
 	}
 	return nil
 }
 
-func (a Action) Compensate(ctx context.Context, _ tx.UnregisterCommand) error {
+func (a SagaAction) Compensate(ctx context.Context, _ tx.UnregisterCommand) error {
 	if err := a.portOut.Decrement(ctx); err != nil {
 		return fmt.Errorf("decrementing count: %w", err)
 	}

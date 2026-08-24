@@ -2,14 +2,19 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/mat-sik/saga-go/examples/internal/adapters/consumer"
+	"github.com/mat-sik/saga-go/examples/internal/adapters/kafka"
+	"github.com/mat-sik/saga-go/examples/internal/adapters/postgres"
+	"github.com/mat-sik/saga-go/examples/internal/adapters/static"
 	"github.com/mat-sik/saga-go/examples/internal/config"
 	"github.com/mat-sik/saga-go/examples/internal/domain/count"
+	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/mat-sik/saga-go/examples/internal/migrations"
 	"github.com/mat-sik/saga-go/saga"
@@ -20,7 +25,7 @@ func main() {
 }
 
 func run() int {
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	conf, err := config.NewTxConsumer(ctx)
 	if err != nil {
@@ -43,25 +48,70 @@ func run() int {
 		}
 	}
 
-	consumerPortOut := consumer.Repository{}
+	errCh := make(chan error, conf.ConsumerCount)
 
-	countAction := count.NewAction(count)
-
-	sagaConsumer := saga.NewConsumer()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	var wg sync.WaitGroup
 	for range conf.ConsumerCount {
-		wg.Add(1)
-		go func() {
-			kafkaClient, _ := kgoconsumer.NewClient(
-				conf.KafkaSeeds,
-				conf.TransactionsTopicConsumerGroup,
-				[]string{conf.TransactionsTopic},
-			)
+		wg.Go(func() {
+			consumer, err := newConsumer(conf, pool)
+			if err != nil {
+				errCh <- fmt.Errorf("creating consumer: %w", err)
+				return
+			}
+			if err = consumer.StartPolling(ctx); err != nil {
+				errCh <- fmt.Errorf("polling: %w", err)
+				return
+			}
+			errCh <- nil
+		})
+	}
 
-			consumer := consumer.NewKafkaSagaConsumer(kafkaClient, cancelProcessing, conf.DLQTopic, pool, nil)
-		}()
+	var errs []error
+	for range conf.ConsumerCount {
+		if err = <-errCh; err != nil {
+			cancel()
+			errs = append(errs, err)
+		}
+	}
+
+	wg.Wait()
+
+	if len(errs) > 0 {
+		slog.Error("consumer", "err", errors.Join(errs...))
+		return 1
 	}
 
 	return 0
+}
+
+func newConsumer(conf config.TxConsumerConfig, pool *pgxpool.Pool) (kgoconsumer.Consumer, error) {
+	kafkaClient, _ := kgoconsumer.NewClient(
+		conf.KafkaSeeds,
+		conf.TransactionsTopicConsumerGroup,
+		[]string{conf.TransactionsTopic},
+	)
+
+	aggregateRepository := postgres.NewAggregateRepository()
+	alarmValueProvider := tx.NewAlarmValueProvider(static.NewAlarmValueProvider(conf.AlarmValue))
+	alarmRaiser := tx.NewAlarmRaiser(kafka.NewAlarmProducer(kafkaClient.ToKgo(), conf.AlarmTopic))
+
+	aggregateAction := tx.NewAggregateSagaAction(aggregateRepository, alarmValueProvider, alarmRaiser)
+
+	logAction := tx.NewLogSagaAction(postgres.NewLogRepository())
+
+	txAction := tx.NewSagaAction(logAction, aggregateAction)
+
+	countAction := count.NewSagaAction(postgres.NewCountRepository())
+
+	actions := []saga.Action[tx.RegisterCommand, tx.UnregisterCommand]{
+		txAction,
+		countAction,
+	}
+
+	sagaConsumer := saga.NewConsumer(actions, postgres.NewConsumerRepository())
+
+	return kafka.NewSagaConsumer(kafkaClient, conf.DLQTopic, pool, sagaConsumer)
 }

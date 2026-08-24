@@ -1,4 +1,4 @@
-package consumer
+package kafka
 
 import (
 	"context"
@@ -16,14 +16,14 @@ import (
 )
 
 // TODO: add transient and pernament errors in the adapters and domain logic
-func NewKafkaSagaConsumer(
+func NewSagaConsumer(
 	client kgoconsumer.Client,
 	dlqTopic string,
 	pool *pgxpool.Pool,
 	sagaConsumer saga.Consumer[tx.RegisterCommand, tx.UnregisterCommand],
 	options ...kgoconsumer.Option,
 ) (kgoconsumer.Consumer, error) {
-	consumer := kafkaSagaConsumer{
+	consumer := kgoSagaConsumer{
 		pool:     pool,
 		consumer: sagaConsumer,
 	}
@@ -36,12 +36,12 @@ func NewKafkaSagaConsumer(
 	)
 }
 
-type kafkaSagaConsumer struct {
+type kgoSagaConsumer struct {
 	pool     *pgxpool.Pool
 	consumer saga.Consumer[tx.RegisterCommand, tx.UnregisterCommand]
 }
 
-func (k kafkaSagaConsumer) consumeRecord(ctx context.Context, record *kgo.Record) (err error) {
+func (k kgoSagaConsumer) consumeRecord(ctx context.Context, record *kgo.Record) (err error) {
 	command, err := mapToCommand(record)
 	if err != nil {
 		return err
