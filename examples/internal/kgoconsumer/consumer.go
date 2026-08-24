@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
@@ -85,6 +86,10 @@ func (c Consumer) pollFetches(ctx context.Context) error {
 		return nil
 	}
 
+	if err := c.fetchesFatalError(fetches); err != nil {
+		return err
+	}
+
 	consumerCtx, cancel := context.WithTimeout(ctx, c.config.processingConfig.timeout)
 	c.cancelProcessing.store(cancel)
 	defer c.cancelProcessing.cancel()
@@ -97,6 +102,33 @@ func (c Consumer) pollFetches(ctx context.Context) error {
 	committable := consumer.processedEpochOffsetsTracker.committableEpochOffsets()
 
 	return c.commitOffsetsSync(ctx, committable)
+}
+
+func (c Consumer) fetchesFatalError(fetches kgo.Fetches) error {
+	allNonFatal := true
+
+	var joinedErr error
+	for _, fetchErr := range fetches.Errors() {
+		err := fmt.Errorf("fetch error topic=%s partition=%d: %w", fetchErr.Topic, fetchErr.Partition, fetchErr.Err)
+		if isFatalFetchErr(err) {
+			allNonFatal = false
+		}
+		joinedErr = errors.Join(joinedErr, err)
+	}
+
+	if allNonFatal {
+		slog.Warn("non fatal fetching", "err", joinedErr)
+		return nil
+	}
+	return joinedErr
+}
+
+func isFatalFetchErr(err error) bool {
+	var dataLoss *kgo.ErrDataLoss
+	if errors.As(err, &dataLoss) {
+		return false
+	}
+	return true
 }
 
 func (c Consumer) newBatchConsumer() batchConsumer {
