@@ -1,4 +1,4 @@
-package kafka
+package kgoconsumer
 
 import "github.com/twmb/franz-go/pkg/kgo"
 

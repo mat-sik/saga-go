@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
-	"github.com/mat-sik/saga-go/examples/internal/kafka"
+	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/mat-sik/saga-go/examples/internal/txctx"
 	"github.com/mat-sik/saga-go/saga"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -17,18 +17,18 @@ import (
 
 // TODO: add transient and pernament errors in the adapters and domain logic
 func NewKafkaSagaConsumer(
-	client kafka.Client,
+	client kgoconsumer.Client,
 	dlqTopic string,
 	pool *pgxpool.Pool,
 	sagaConsumer saga.Consumer[tx.RegisterCommand, tx.UnregisterCommand],
-	options ...kafka.Option,
-) (kafka.Consumer, error) {
+	options ...kgoconsumer.Option,
+) (kgoconsumer.Consumer, error) {
 	consumer := kafkaSagaConsumer{
 		pool:     pool,
 		consumer: sagaConsumer,
 	}
 
-	return kafka.NewConsumer(
+	return kgoconsumer.NewConsumer(
 		client,
 		dlqTopic,
 		consumer.consumeRecord,

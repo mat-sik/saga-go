@@ -10,7 +10,7 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/adapters/consumer"
 	"github.com/mat-sik/saga-go/examples/internal/config"
 	"github.com/mat-sik/saga-go/examples/internal/domain/count"
-	"github.com/mat-sik/saga-go/examples/internal/kafka"
+	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/mat-sik/saga-go/examples/internal/migrations"
 	"github.com/mat-sik/saga-go/saga"
 )
@@ -53,7 +53,7 @@ func run() int {
 	for range conf.ConsumerCount {
 		wg.Add(1)
 		go func() {
-			kafkaClient, _ := kafka.NewClient(
+			kafkaClient, _ := kgoconsumer.NewClient(
 				conf.KafkaSeeds,
 				conf.TransactionsTopicConsumerGroup,
 				[]string{conf.TransactionsTopic},
