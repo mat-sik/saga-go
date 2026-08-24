@@ -9,22 +9,12 @@ import (
 	"github.com/twmb/franz-go/pkg/kmsg"
 )
 
-type Consumer struct {
-	client           *kgo.Client
-	dlqProducer      *dlqProducer
+type Client struct {
 	cancelProcessing *cancelProcessingStore
-	recordConsumer   RecordConsumer
-	config           config
+	kgoClient        *kgo.Client
 }
 
-func NewConsumer(
-	seeds []string,
-	consumerGroup string,
-	topics []string,
-	dlqTopic string,
-	recordConsumer RecordConsumer,
-	options ...Option,
-) (Consumer, error) {
+func NewClient(seeds []string, consumerGroup string, topics []string) (Client, error) {
 	cancelProcessing := newCancelProcessingStore()
 
 	opts := []kgo.Opt{
@@ -40,13 +30,33 @@ func NewConsumer(
 
 	client, err := kgo.NewClient(opts...)
 	if err != nil {
-		return Consumer{}, fmt.Errorf("creating new franz-go client: %w", err)
+		return Client{}, fmt.Errorf("creating new franz-go client: %w", err)
 	}
 
-	return Consumer{
-		client:           client,
-		dlqProducer:      newDlqProducer(client, dlqTopic),
+	return Client{
 		cancelProcessing: cancelProcessing,
+		kgoClient:        client,
+	}, nil
+}
+
+type Consumer struct {
+	client           *kgo.Client
+	dlqProducer      *dlqProducer
+	cancelProcessing *cancelProcessingStore
+	recordConsumer   RecordConsumer
+	config           config
+}
+
+func NewConsumer(
+	kafkaClient Client,
+	dlqTopic string,
+	recordConsumer RecordConsumer,
+	options ...Option,
+) (Consumer, error) {
+	return Consumer{
+		client:           kafkaClient.kgoClient,
+		dlqProducer:      newDlqProducer(kafkaClient.kgoClient, dlqTopic),
+		cancelProcessing: kafkaClient.cancelProcessing,
 		recordConsumer:   recordConsumer,
 		config:           newConfig(options...),
 	}, nil

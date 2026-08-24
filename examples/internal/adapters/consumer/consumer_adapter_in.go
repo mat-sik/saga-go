@@ -17,14 +17,23 @@ import (
 
 // TODO: add transient and pernament errors in the adapters and domain logic
 func NewKafkaSagaConsumer(
-	seeds []string,
-	consumerGroup string,
-	topic string,
+	client kafka.Client,
 	dlqTopic string,
-	sagaConsumer kafkaSagaConsumer,
+	pool *pgxpool.Pool,
+	sagaConsumer saga.Consumer[tx.RegisterCommand, tx.UnregisterCommand],
 	options ...kafka.Option,
 ) (kafka.Consumer, error) {
-	return kafka.NewConsumer(seeds, consumerGroup, []string{topic}, dlqTopic, sagaConsumer.consumeRecord, options...)
+	consumer := kafkaSagaConsumer{
+		pool:     pool,
+		consumer: sagaConsumer,
+	}
+
+	return kafka.NewConsumer(
+		client,
+		dlqTopic,
+		consumer.consumeRecord,
+		options...,
+	)
 }
 
 type kafkaSagaConsumer struct {
