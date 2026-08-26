@@ -111,11 +111,11 @@ func newConsumer(conf config.TxConsumerConfig, pool *pgxpool.Pool) (kgoconsumer.
 	countAction := count.NewSagaAction(postgres.NewCountRepository())
 
 	actions := []saga.Action[tx.RegisterCommand, tx.UnregisterCommand]{
-		txAction,
-		countAction,
+		postgres.NewScopedTxAction(pool, txAction),
+		postgres.NewScopedTxAction(pool, countAction),
 	}
 
 	sagaConsumer := saga.NewConsumer(actions, postgres.NewConsumerRepository())
 
-	return kafka.NewSagaConsumer(kafkaClient, conf.DLQTopic, pool, sagaConsumer)
+	return kafka.NewSagaConsumer(kafkaClient, conf.DLQTopic, sagaConsumer)
 }

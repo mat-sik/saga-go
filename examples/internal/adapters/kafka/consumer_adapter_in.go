@@ -3,14 +3,11 @@ package kafka
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
-	"github.com/mat-sik/saga-go/examples/internal/txctx"
 	"github.com/mat-sik/saga-go/saga"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -19,12 +16,10 @@ import (
 func NewSagaConsumer(
 	client kgoconsumer.Client,
 	dlqTopic string,
-	pool *pgxpool.Pool,
 	sagaConsumer saga.Consumer[tx.RegisterCommand, tx.UnregisterCommand],
 	options ...kgoconsumer.Option,
 ) (kgoconsumer.Consumer, error) {
 	consumer := kgoSagaConsumer{
-		pool:     pool,
 		consumer: sagaConsumer,
 	}
 
@@ -37,7 +32,6 @@ func NewSagaConsumer(
 }
 
 type kgoSagaConsumer struct {
-	pool     *pgxpool.Pool
 	consumer saga.Consumer[tx.RegisterCommand, tx.UnregisterCommand]
 }
 
@@ -47,19 +41,6 @@ func (k kgoSagaConsumer) consumeRecord(ctx context.Context, record *kgo.Record) 
 		return err
 	}
 
-	pgxTx, err := k.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("beginning tx: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			if rollbackErr := pgxTx.Rollback(ctx); rollbackErr != nil {
-				err = errors.Join(err, fmt.Errorf("rolling back: %w", rollbackErr))
-			}
-		}
-	}()
-
-	ctx = txctx.WithTx(ctx, pgxTx)
 	if err = k.consumer.Consume(ctx, command); err != nil {
 		return fmt.Errorf("consuming command %v: %w", command, err)
 	}
