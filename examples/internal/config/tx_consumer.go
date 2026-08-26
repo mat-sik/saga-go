@@ -11,8 +11,8 @@ type TxConsumerConfig struct {
 	DatabaseURL                    string   `env:"TX_CONSUMER_DATABASE_URL"`
 	KafkaSeeds                     []string `env:"TX_CONSUMER_KAFKA_SEEDS"`
 	TransactionsTopic              string   `env:"TX_CONSUMER_KAFKA_TRANSACTIONS_TOPIC"`
+	TransactionsDLQTopic           string   `env:"TX_CONSUMER_KAFKA_TRANSACTIONS_DLQ_TOPIC"`
 	TransactionsTopicConsumerGroup string   `env:"TX_CONSUMER_KAFKA_TRANSACTIONS_TOPIC_CONSUMER_GROUP"`
-	DLQTopic                       string   `env:"TX_CONSUMER_KAFKA_DLQ_TOPIC"`
 	AlarmTopic                     string   `env:"TX_CONSUMER_KAFKA_ALARM_TOPIC"`
 	ConsumerCount                  int      `env:"TX_CONSUMER_KAFKA_CONSUMER_COUNT"`
 	AlarmValue                     int      `env:"TX_CONSUMER_ALARM_VALUE"`

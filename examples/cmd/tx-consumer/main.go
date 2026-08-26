@@ -117,5 +117,5 @@ func newConsumer(conf config.TxConsumerConfig, pool *pgxpool.Pool) (kgoconsumer.
 
 	sagaConsumer := saga.NewConsumer(actions, postgres.NewConsumerRepository())
 
-	return kafka.NewSagaConsumer(kafkaClient, conf.DLQTopic, sagaConsumer)
+	return kafka.NewSagaConsumer(kafkaClient, conf.TransactionsDLQTopic, sagaConsumer)
 }
