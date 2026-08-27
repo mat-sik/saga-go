@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mat-sik/saga-go/examples/internal/adapters/postgres"
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/mat-sik/saga-go/saga"
@@ -15,11 +17,13 @@ import (
 // TODO: add transient and pernament errors in the adapters and domain logic
 func NewSagaConsumer(
 	client kgoconsumer.Client,
+	pool *pgxpool.Pool,
 	dlqTopic string,
 	sagaConsumer saga.Consumer[tx.RegisterCommand, tx.UnregisterCommand],
 	options ...kgoconsumer.Option,
 ) (kgoconsumer.Consumer, error) {
 	consumer := kgoSagaConsumer{
+		pool:     pool,
 		consumer: sagaConsumer,
 	}
 
@@ -32,6 +36,7 @@ func NewSagaConsumer(
 }
 
 type kgoSagaConsumer struct {
+	pool     *pgxpool.Pool
 	consumer saga.Consumer[tx.RegisterCommand, tx.UnregisterCommand]
 }
 
@@ -41,10 +46,14 @@ func (k kgoSagaConsumer) consumeRecord(ctx context.Context, record *kgo.Record) 
 		return err
 	}
 
-	if err = k.consumer.Consume(ctx, command); err != nil {
-		return fmt.Errorf("consuming command %v: %w", command, err)
+	consume := func(txCtx context.Context) error {
+		if err = k.consumer.Consume(txCtx, command); err != nil {
+			return fmt.Errorf("consuming command %v: %w", command, err)
+		}
+		return nil
 	}
-	return nil
+
+	return postgres.WithTx(ctx, k.pool, consume)
 }
 
 func mapToCommand(record *kgo.Record) (saga.Command[tx.RegisterCommand, tx.UnregisterCommand], error) {

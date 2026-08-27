@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
 	"github.com/mat-sik/saga-go/examples/internal/txctx"
 	"github.com/mat-sik/saga-go/saga"
@@ -102,4 +104,27 @@ func (r ConsumerRepository) TransactionCompensated(ctx context.Context, transact
 		return false, fmt.Errorf("querying for already compensated transaction %s: %w", transactionID, err)
 	}
 	return alreadyCompensated, nil
+}
+
+func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(ctx context.Context) error) error {
+	pgxTx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("beginning tx: %w", err)
+	}
+
+	defer func() {
+		if err != nil {
+			if rollbackErr := pgxTx.Rollback(ctx); rollbackErr != nil {
+				err = errors.Join(err, fmt.Errorf("rolling back: %w", rollbackErr))
+			}
+			return
+		}
+		if commitErr := pgxTx.Commit(ctx); commitErr != nil {
+			err = errors.Join(err, fmt.Errorf("committing: %w", commitErr))
+		}
+	}()
+
+	ctx = txctx.WithTx(ctx, pgxTx)
+
+	return fn(ctx)
 }
