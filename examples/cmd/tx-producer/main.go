@@ -43,25 +43,27 @@ func run() int {
 	}
 	defer client.Close()
 
+	generator, err := newRecordGenerator(
+		conf.TransactionsTopic,
+		[]string{
+			"EUR",
+			"USD",
+			"PLN",
+		},
+		10,
+		10,
+		10,
+		50,
+	)
+	if err != nil {
+		slog.Error("creating record generator", "err", err)
+		return 1
+	}
+
 	records := make([]*kgo.Record, conf.ProduceAmount)
 	for i := range conf.ProduceAmount {
-		transactionID, err := randomID()
-		if err != nil {
-			slog.Error("generating transactionID", "err", err)
-			return 1
-		}
 
-		playerID, err := randomID()
-		if err != nil {
-			slog.Error("generating playerID", "err", err)
-			return 1
-		}
-
-		randCurrency := string(randomCurrency())
-		randValue := randomValue()
-		txTime := time.Now()
-
-		record, err := newRecord(conf.TransactionsTopic, transactionID, playerID, randCurrency, randValue, txTime)
+		record, err := generator.generateRecord()
 		if err != nil {
 			slog.Error("creating record", "err", err)
 			return 1
@@ -87,13 +89,76 @@ func run() int {
 	return 0
 }
 
-func newRecord(topic, transactionID, playerID, currency string, value int, txTime time.Time) (*kgo.Record, error) {
-	registerRecord := kafka.RegisterRecord{
-		PlayerID: playerID,
-		Currency: currency,
-		Value:    value,
-		Time:     txTime,
+type recordGenerator struct {
+	topic          string
+	currencies     []string
+	playerIDs      []string
+	transactionIDs []string
+	days           []time.Time
+	maxValue       int
+}
+
+func newRecordGenerator(
+	topic string,
+	currencies []string,
+	playersIDAmount int,
+	transactionIDAmount int,
+	daysAmount int,
+	maxValue int,
+) (recordGenerator, error) {
+	playerIDs, err := randomIDs(playersIDAmount)
+	if err != nil {
+		return recordGenerator{}, err
 	}
+
+	transactionIDs, err := randomIDs(transactionIDAmount)
+	if err != nil {
+		return recordGenerator{}, err
+	}
+
+	return recordGenerator{
+		topic:          topic,
+		currencies:     currencies,
+		playerIDs:      playerIDs,
+		transactionIDs: transactionIDs,
+		days:           nextNDays(daysAmount),
+		maxValue:       maxValue,
+	}, nil
+}
+
+func randomIDs(amount int) ([]string, error) {
+	ids := make([]string, amount)
+	for i := range amount {
+		id, err := randomID()
+		if err != nil {
+			return nil, err
+		}
+		ids[i] = id
+	}
+	return ids, nil
+}
+
+func nextNDays(amount int) []time.Time {
+	days := make([]time.Time, amount)
+	now := time.Now()
+	for i := range amount {
+		day := now.AddDate(0, 0, i)
+		days[i] = day
+	}
+	return days
+}
+
+func (g recordGenerator) generateRecord() (*kgo.Record, error) {
+	registerRecord := kafka.RegisterRecord{
+		PlayerID: g.pickPlayerID(),
+		Currency: g.pickCurrency(),
+		Value:    g.pickValue(),
+		Time:     g.pickDay(),
+	}
+	return g.newRecord(g.pickTransactionID(), registerRecord)
+}
+
+func (g recordGenerator) newRecord(transactionID string, registerRecord kafka.RegisterRecord) (*kgo.Record, error) {
 
 	body, err := json.Marshal(registerRecord)
 	if err != nil {
@@ -104,7 +169,7 @@ func newRecord(topic, transactionID, playerID, currency string, value int, txTim
 	return &kgo.Record{
 		Key:   []byte(key),
 		Value: body,
-		Topic: topic,
+		Topic: g.topic,
 		Headers: []kgo.RecordHeader{
 			{
 				Key:   kafka.CmdTypeHeader,
@@ -114,8 +179,28 @@ func newRecord(topic, transactionID, playerID, currency string, value int, txTim
 	}, nil
 }
 
-func randomValue() int {
-	return rand.N(100) + 1
+func (g recordGenerator) pickPlayerID() string {
+	return pickElFromSlice(g.playerIDs)
+}
+
+func (g recordGenerator) pickCurrency() string {
+	return pickElFromSlice(g.currencies)
+}
+
+func (g recordGenerator) pickDay() time.Time {
+	return pickElFromSlice(g.days)
+}
+
+func (g recordGenerator) pickTransactionID() string {
+	return pickElFromSlice(g.transactionIDs)
+}
+
+func (g recordGenerator) pickValue() int {
+	return rand.N(g.maxValue) + 1
+}
+
+func pickElFromSlice[T any](slice []T) T {
+	return slice[rand.N(len(slice))]
 }
 
 func randomID() (string, error) {
@@ -125,23 +210,3 @@ func randomID() (string, error) {
 	}
 	return id.String(), err
 }
-
-func randomCurrency() currency {
-	currenciesCount := 3
-	switch rand.N(currenciesCount) {
-	case 0:
-		return EUR
-	case 1:
-		return USD
-	default:
-		return PLN
-	}
-}
-
-type currency string
-
-var (
-	EUR currency = "EUR"
-	USD currency = "USD"
-	PLN currency = "PLN"
-)
