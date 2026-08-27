@@ -23,13 +23,16 @@ func NewConsumer[T, CT any](sagaActions []Action[T, CT], portOut PortOut[T, CT])
 }
 
 func (c Consumer[T, CT]) Consume(ctx context.Context, command Command[T, CT]) (err error) {
+	var alreadyHandled bool
+
 	defer func() {
-		if err == nil {
-			err = c.portOut.MarkCommandAsHandled(ctx, command)
+		if err == nil && !alreadyHandled {
+			if err = c.portOut.MarkCommandAsHandled(ctx, command); err != nil {
+				err = fmt.Errorf("marking command as handled %v: %w", command, err)
+			}
 		}
 	}()
 
-	var alreadyHandled bool
 	if alreadyHandled, err = c.portOut.CommandAlreadyHandled(ctx, command); err != nil {
 		return fmt.Errorf("checking if command %v handled: %w", command, err)
 	} else if alreadyHandled {
