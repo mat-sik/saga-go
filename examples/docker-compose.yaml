@@ -59,6 +59,17 @@ services:
       - ./scripts/create-topics.sh:/scripts/create-topics.sh:ro
     entrypoint: [ /bin/sh, /scripts/create-topics.sh ]
 
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.5.0
+    restart: on-failure
+    networks:
+      - net
+    ports:
+      - '8080:8080'
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-broker:9092
+
 volumes:
   tx-consumer:
   kafka-broker-data:
