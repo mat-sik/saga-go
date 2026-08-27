@@ -120,7 +120,7 @@ func (c Consumer) fetchesFatalError(fetches kgo.Fetches) error {
 		joinedErr = errors.Join(joinedErr, err)
 	}
 
-	if allNonFatal {
+	if allNonFatal && joinedErr != nil {
 		slog.Warn("non fatal fetching", "err", joinedErr)
 		return nil
 	}
@@ -169,9 +169,7 @@ type batchConsumer struct {
 }
 
 func (bc batchConsumer) consumeFetches(ctx context.Context, fetches kgo.Fetches) (err error) {
-	ctx, cancelPublishing := context.WithCancel(ctx)
 	defer func() {
-		cancelPublishing()
 		dlqProcessed, publishingErr := bc.dlqProducer.drain()
 		if publishingErr != nil {
 			err = errors.Join(err, publishingErr)

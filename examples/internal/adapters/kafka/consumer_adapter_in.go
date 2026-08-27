@@ -48,7 +48,7 @@ func (k kgoSagaConsumer) consumeRecord(ctx context.Context, record *kgo.Record) 
 }
 
 func mapToCommand(record *kgo.Record) (saga.Command[tx.RegisterCommand, tx.UnregisterCommand], error) {
-	cmdType, err := headerValue(record, cmdTypeHeader)
+	cmdType, err := headerValue(record, CmdTypeHeader)
 	if err != nil {
 		return nil, err
 	}
@@ -56,13 +56,13 @@ func mapToCommand(record *kgo.Record) (saga.Command[tx.RegisterCommand, tx.Unreg
 	transactionID := string(record.Key)
 
 	switch cmdType {
-	case cmdTypeRegister:
+	case CmdTypeRegister:
 		var registerRecord RegisterRecord
 		if err = json.Unmarshal(record.Value, &registerRecord); err != nil {
 			return nil, fmt.Errorf("unmarshaling register record: %w", err)
 		}
 		return registerRecord.toRegisterCommand(transactionID), nil
-	case cmdTypeUnregister:
+	case CmdTypeUnregister:
 		var unregisterRecord UnregisterRecord
 		if err = json.Unmarshal(record.Value, &unregisterRecord); err != nil {
 			return nil, fmt.Errorf("unmarshaling unregister record: %w", err)
@@ -118,7 +118,7 @@ func headerValue(record *kgo.Record, key string) (string, error) {
 }
 
 const (
-	cmdTypeHeader     = "cmd-type"
-	cmdTypeRegister   = "register"
-	cmdTypeUnregister = "unregister"
+	CmdTypeHeader     = "cmd-type"
+	CmdTypeRegister   = "register"
+	CmdTypeUnregister = "unregister"
 )

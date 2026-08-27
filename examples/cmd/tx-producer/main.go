@@ -105,6 +105,12 @@ func newRecord(topic, transactionID, playerID, currency string, value int, txTim
 		Key:   []byte(key),
 		Value: body,
 		Topic: topic,
+		Headers: []kgo.RecordHeader{
+			{
+				Key:   kafka.CmdTypeHeader,
+				Value: []byte(kafka.CmdTypeRegister),
+			},
+		},
 	}, nil
 }
 

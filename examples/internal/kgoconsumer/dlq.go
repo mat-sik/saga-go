@@ -64,7 +64,10 @@ func (p *dlqProducer) drain() ([]*kgo.Record, error) {
 			processed = append(processed, result.failedRecord)
 		}
 	}
-	return processed, fmt.Errorf("publishing: %w", errors.Join(publishErrs...))
+	if len(publishErrs) > 0 {
+		return processed, fmt.Errorf("publishing: %w", errors.Join(publishErrs...))
+	}
+	return processed, nil
 }
 
 type dlqProduceResult struct {
