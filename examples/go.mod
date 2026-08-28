@@ -5,7 +5,7 @@ go 1.26.5
 require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/mat-sik/saga-go/saga v0.0.0-20260815103616-fd5d9589792e
+	github.com/mat-sik/saga-go/saga v0.0.0-20260827184814-c3015f10b050
 	github.com/pressly/goose/v3 v3.27.3
 	github.com/sethvargo/go-envconfig v1.4.3
 	github.com/twmb/franz-go v1.21.6
