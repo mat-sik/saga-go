@@ -45,15 +45,11 @@ func run() int {
 
 	generator, err := newRecordGenerator(
 		conf.TransactionsTopic,
-		[]string{
-			"EUR",
-			"USD",
-			"PLN",
-		},
-		10,
-		10,
-		10,
-		50,
+		conf.Currencies,
+		conf.PlayerIDAmount,
+		conf.TransactionIDAmount,
+		conf.DaysAmount,
+		conf.MaxValue,
 	)
 	if err != nil {
 		slog.Error("creating record generator", "err", err)
