@@ -64,9 +64,9 @@ func (a AggregateSagaAction) updateAlarmState(ctx context.Context, playerID stri
 	previousValue := updatedValue - deltaValue
 	switch crossing(previousValue, updatedValue, alarmValue) {
 	case crossedBelow:
-		return a.alarmRaiser.clearAlarm(ctx, playerID)
+		return a.alarmRaiser.ClearAlarm(ctx, playerID)
 	case crossedAbove:
-		return a.alarmRaiser.raiseAlarm(ctx, playerID, alarmValue, updatedValue)
+		return a.alarmRaiser.RaiseAlarm(ctx, playerID, alarmValue, updatedValue)
 	default:
 		return nil
 	}

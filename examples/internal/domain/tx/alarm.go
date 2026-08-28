@@ -18,14 +18,14 @@ func NewAlarmRaiser(portOut AlarmRaiserPortOut) AlarmRaiser {
 	return AlarmRaiser{portOut: portOut}
 }
 
-func (ar AlarmRaiser) raiseAlarm(ctx context.Context, playerID string, alarmValue, value int) error {
+func (ar AlarmRaiser) RaiseAlarm(ctx context.Context, playerID string, alarmValue, value int) error {
 	if err := ar.portOut.RaiseAlarm(ctx, playerID, alarmValue, value); err != nil {
 		return fmt.Errorf("raising alarm of player %s %d/%d: %w", playerID, value, alarmValue, err)
 	}
 	return nil
 }
 
-func (ar AlarmRaiser) clearAlarm(ctx context.Context, playerID string) error {
+func (ar AlarmRaiser) ClearAlarm(ctx context.Context, playerID string) error {
 	if err := ar.portOut.ClearAlarm(ctx, playerID); err != nil {
 		return fmt.Errorf("clearing alarm of player %s: %w", playerID, err)
 	}
