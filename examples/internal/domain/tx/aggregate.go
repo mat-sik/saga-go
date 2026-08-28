@@ -5,6 +5,11 @@ import (
 	"fmt"
 )
 
+type AggregatePortOut interface {
+	Upsert(ctx context.Context, id RegisterID, value int) (int, error)
+	Subtract(ctx context.Context, id RegisterID, value int) (int, error)
+}
+
 type AggregateSagaAction struct {
 	portOut            AggregatePortOut
 	alarmValueProvider AlarmValueProvider

@@ -3,7 +3,13 @@ package tx
 import (
 	"context"
 	"fmt"
+	"time"
 )
+
+type LogPortOut interface {
+	InsertLog(ctx context.Context, registerCommand RegisterCommand) error
+	InsertCompensatingLog(ctx context.Context, transactionID string, compensatedTransactionID string, createdAt time.Time) error
+}
 
 type LogSagaAction struct {
 	portOut LogPortOut

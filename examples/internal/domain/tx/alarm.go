@@ -5,6 +5,11 @@ import (
 	"fmt"
 )
 
+type AlarmRaiserPortOut interface {
+	RaiseAlarm(ctx context.Context, playerID string, alarmValue, value int) error
+	ClearAlarm(ctx context.Context, playerID string) error
+}
+
 type AlarmRaiser struct {
 	portOut AlarmRaiserPortOut
 }
@@ -25,6 +30,10 @@ func (ar AlarmRaiser) clearAlarm(ctx context.Context, playerID string) error {
 		return fmt.Errorf("clearing alarm of player %s: %w", playerID, err)
 	}
 	return nil
+}
+
+type AlarmValueProviderPortOut interface {
+	AlarmValue(ctx context.Context, playerID string) (int, error)
 }
 
 type AlarmValueProvider struct {
