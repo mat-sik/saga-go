@@ -85,10 +85,10 @@ func newConsumer(conf config.MailSender) (kgoconsumer.Consumer, error) {
 	auth := smtp.PlainAuth("", conf.SMTPUsername, conf.SMTPPassword, conf.SMTPHost)
 	mailSender := mail.NewAlarmMailSender(auth, conf.SMTPAddr(), conf.MailFrom, conf.MailTo)
 
-	consumeFn := func(ctx context.Context, record *kgo.Record) error {
+	recordConsumer := func(ctx context.Context, record *kgo.Record) error {
 		return consumeAlarm(ctx, mailSender, record)
 	}
-	return kgoconsumer.NewConsumer(kafkaClient, conf.AlarmsDLQTopic, consumeFn)
+	return kgoconsumer.NewConsumer(kafkaClient, conf.AlarmsDLQTopic, recordConsumer)
 }
 
 func consumeAlarm(ctx context.Context, mailSender mail.AlarmMailSender, record *kgo.Record) error {

@@ -83,18 +83,22 @@ func newConsumer(conf config.TxValidator) (kgoconsumer.Consumer, error) {
 
 	validator := tx.NewValidator(kafka.NewRandomValidator(kafkaClient.ToKgo(), conf.TransactionsTopic, conf.CompensatePercent))
 
-	consumeFn := func(ctx context.Context, record *kgo.Record) error {
-		registerCommand, ok, err := mapToRegisterCommand(record)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return nil
-		}
-		return validator.ValidateAndCompensate(ctx, registerCommand)
+	recordConsumer := func(ctx context.Context, record *kgo.Record) error {
+		return consumeRegisterRecord(ctx, validator, record)
 	}
 
-	return kgoconsumer.NewConsumer(kafkaClient, conf.TransactionsDLQTopic, consumeFn)
+	return kgoconsumer.NewConsumer(kafkaClient, conf.TransactionsDLQTopic, recordConsumer)
+}
+
+func consumeRegisterRecord(ctx context.Context, validator tx.Validator, record *kgo.Record) error {
+	registerCommand, ok, err := mapToRegisterCommand(record)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	return validator.ValidateAndCompensate(ctx, registerCommand)
 }
 
 func mapToRegisterCommand(record *kgo.Record) (tx.RegisterCommand, bool, error) {
