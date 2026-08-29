@@ -41,7 +41,7 @@ type kgoSagaConsumer struct {
 }
 
 func (k kgoSagaConsumer) consumeRecord(ctx context.Context, record *kgo.Record) (err error) {
-	command, err := mapToCommand(record)
+	command, err := MapToCommand(record)
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func (k kgoSagaConsumer) consumeRecord(ctx context.Context, record *kgo.Record) 
 	return postgres.WithTx(ctx, k.pool, consume)
 }
 
-func mapToCommand(record *kgo.Record) (saga.Command[tx.RegisterCommand, tx.UnregisterCommand], error) {
+func MapToCommand(record *kgo.Record) (saga.Command[tx.RegisterCommand, tx.UnregisterCommand], error) {
 	cmdType, err := headerValue(record, CmdTypeHeader)
 	if err != nil {
 		return nil, err

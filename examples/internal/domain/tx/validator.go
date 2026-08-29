@@ -14,7 +14,13 @@ type Validator struct {
 	portOut ValidatorPortOut
 }
 
-func (v Validator) validateAndCompensate(ctx context.Context, registerCommand RegisterCommand) error {
+func NewValidator(portOut ValidatorPortOut) Validator {
+	return Validator{
+		portOut: portOut,
+	}
+}
+
+func (v Validator) ValidateAndCompensate(ctx context.Context, registerCommand RegisterCommand) error {
 	valid, err := v.portOut.Validate(ctx, registerCommand)
 	if err != nil {
 		return fmt.Errorf("validating %v: %w", registerCommand, err)
