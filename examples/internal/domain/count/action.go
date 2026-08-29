@@ -7,6 +7,11 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
 )
 
+type PortOut interface {
+	Increment(ctx context.Context) error
+	Decrement(ctx context.Context) error
+}
+
 type SagaAction struct {
 	portOut PortOut
 }
