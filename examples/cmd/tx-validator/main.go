@@ -71,7 +71,7 @@ func run() int {
 	return 0
 }
 
-func newConsumer(conf config.TxValidatorConfig) (kgoconsumer.Consumer, error) {
+func newConsumer(conf config.TxValidator) (kgoconsumer.Consumer, error) {
 	kafkaClient, err := kgoconsumer.NewClient(
 		conf.KafkaSeeds,
 		conf.TransactionsTopicConsumerGroup,

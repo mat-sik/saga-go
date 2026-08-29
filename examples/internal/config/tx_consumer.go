@@ -7,7 +7,7 @@ import (
 	"github.com/sethvargo/go-envconfig"
 )
 
-type TxConsumerConfig struct {
+type TxConsumer struct {
 	DatabaseURL                    string   `env:"TX_CONSUMER_DATABASE_URL"`
 	KafkaSeeds                     []string `env:"TX_CONSUMER_KAFKA_SEEDS"`
 	TransactionsTopic              string   `env:"TX_CONSUMER_KAFKA_TRANSACTIONS_TOPIC"`
@@ -18,10 +18,10 @@ type TxConsumerConfig struct {
 	AlarmValue                     int      `env:"TX_CONSUMER_ALARM_VALUE"`
 }
 
-func NewTxConsumer(ctx context.Context) (TxConsumerConfig, error) {
-	var config TxConsumerConfig
+func NewTxConsumer(ctx context.Context) (TxConsumer, error) {
+	var config TxConsumer
 	if err := envconfig.Process(ctx, &config); err != nil {
-		return TxConsumerConfig{}, fmt.Errorf("processing tx-consumer env variables: %w", err)
+		return TxConsumer{}, fmt.Errorf("processing tx-consumer env variables: %w", err)
 	}
 
 	return config, nil

@@ -88,7 +88,7 @@ func run() int {
 	return 0
 }
 
-func newConsumer(conf config.TxConsumerConfig, pool *pgxpool.Pool) (kgoconsumer.Consumer, error) {
+func newConsumer(conf config.TxConsumer, pool *pgxpool.Pool) (kgoconsumer.Consumer, error) {
 	kafkaClient, err := kgoconsumer.NewClient(
 		conf.KafkaSeeds,
 		conf.TransactionsTopicConsumerGroup,

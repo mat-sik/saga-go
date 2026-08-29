@@ -7,7 +7,7 @@ import (
 	"github.com/sethvargo/go-envconfig"
 )
 
-type MailSenderConfig struct {
+type MailSender struct {
 	KafkaSeeds               []string `env:"MAIL_SENDER_KAFKA_SEEDS"`
 	AlarmsTopic              string   `env:"MAIL_SENDER_KAFKA_ALARMS_TOPIC"`
 	AlarmsDLQTopic           string   `env:"MAIL_SENDER_KAFKA_ALARMS_DLQ_TOPIC"`
@@ -21,14 +21,14 @@ type MailSenderConfig struct {
 	MailTo                   string   `env:"MAIL_SENDER_MAIL_TO"`
 }
 
-func (c MailSenderConfig) SMTPAddr() string {
+func (c MailSender) SMTPAddr() string {
 	return c.SMTPHost + ":" + c.SMTPPort
 }
 
-func NewMailSender(ctx context.Context) (MailSenderConfig, error) {
-	var config MailSenderConfig
+func NewMailSender(ctx context.Context) (MailSender, error) {
+	var config MailSender
 	if err := envconfig.Process(ctx, &config); err != nil {
-		return MailSenderConfig{}, fmt.Errorf("processing mail-sender env variables: %w", err)
+		return MailSender{}, fmt.Errorf("processing mail-sender env variables: %w", err)
 	}
 	return config, nil
 }
