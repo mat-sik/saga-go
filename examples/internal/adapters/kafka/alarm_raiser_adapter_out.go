@@ -57,9 +57,9 @@ func (a AlarmProducer) produce(ctx context.Context, playerID string, payload any
 }
 
 type RaiseAlarmRecord struct {
-	PlayerID   string `json:"PlayerID"`
-	AlarmValue int    `json:"AlarmValue"`
-	Value      int    `json:"Value"`
+	PlayerID   string `json:"playerID"`
+	AlarmValue int    `json:"alarmValue"`
+	Value      int    `json:"value"`
 }
 
 func MapToRaiseAlarmRecord(record *kgo.Record) (RaiseAlarmRecord, bool, error) {
@@ -78,7 +78,7 @@ func MapToRaiseAlarmRecord(record *kgo.Record) (RaiseAlarmRecord, bool, error) {
 }
 
 type ClearAlarmRecord struct {
-	PlayerID string `json:"PlayerID"`
+	PlayerID string `json:"playerID"`
 }
 
 func MapToClearAlarmRecord(record *kgo.Record) (ClearAlarmRecord, bool, error) {
