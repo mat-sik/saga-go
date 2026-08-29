@@ -165,13 +165,13 @@ func (g recordGenerator) newRecord(transactionID string, registerRecord kafka.Re
 	return &kgo.Record{
 		Key:   []byte(key),
 		Value: body,
-		Topic: g.topic,
 		Headers: []kgo.RecordHeader{
 			{
 				Key:   kafka.CmdTypeHeader,
 				Value: []byte(kafka.CmdTypeRegister),
 			},
 		},
+		Topic: g.topic,
 	}, nil
 }
 
