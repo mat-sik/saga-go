@@ -71,7 +71,7 @@ func (a AggregateSagaAction) updateAlarmState(ctx context.Context, playerID stri
 		if err != nil {
 			return fmt.Errorf("generating raise alarm UUIDv7: %w", err)
 		}
-		return a.alarmRaiser.Execute(ctx, alarm.NewRaiseAlarmCommand(id.String(), playerID, deltaValue, updatedValue))
+		return a.alarmRaiser.Execute(ctx, alarm.NewRaiseAlarmCommand(id.String(), playerID, alarmValue, updatedValue))
 	case crossedBelow:
 		id, err := uuid.NewV7()
 		if err != nil {
