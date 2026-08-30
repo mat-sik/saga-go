@@ -20,6 +20,20 @@ type RegisterCommand struct {
 	Value      int
 }
 
+func NewRegisterCommand(transactionID, playerID, currency string, time time.Time, value int) RegisterCommand {
+	return RegisterCommand{
+		RegisterID: RegisterID{
+			ID: ID{
+				TransactionID: transactionID,
+				PlayerID:      playerID,
+				Currency:      currency,
+			},
+			Time: time,
+		},
+		Value: value,
+	}
+}
+
 func (r RegisterCommand) ToTransaction() (RegisterCommand, bool) {
 	return r, true
 }
@@ -32,6 +46,14 @@ type UnregisterCommand struct {
 	ID              string
 	RegisterCommand RegisterCommand
 	Time            time.Time
+}
+
+func NewUnregisterCommand(transactionID string, time time.Time, registerCommand RegisterCommand) UnregisterCommand {
+	return UnregisterCommand{
+		ID:              transactionID,
+		RegisterCommand: registerCommand,
+		Time:            time,
+	}
 }
 
 func (u UnregisterCommand) ToTransaction() (RegisterCommand, bool) {

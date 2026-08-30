@@ -11,11 +11,15 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/kafka"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/mail"
+	"github.com/mat-sik/saga-go/examples/internal/adapters/postgres"
 	"github.com/mat-sik/saga-go/examples/internal/config"
+	"github.com/mat-sik/saga-go/examples/internal/domain/alarm"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
-	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/mat-sik/saga-go/examples/internal/migrations"
+	"github.com/mat-sik/saga-go/saga"
 )
 
 func main() {
@@ -32,6 +36,18 @@ func run() int {
 		return 1
 	}
 
+	pool, err := pgxpool.New(ctx, conf.DatabaseURL)
+	if err != nil {
+		slog.Error("creating pgx pool", "err", err)
+		return 1
+	}
+	defer pool.Close()
+
+	if err = migrations.RunSagaConsumer(pool); err != nil {
+		slog.Error("running tx-consumer migrations", "err", err)
+		return 1
+	}
+
 	errCh := make(chan error, conf.ConsumerCount)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -40,7 +56,7 @@ func run() int {
 	var wg sync.WaitGroup
 	for range conf.ConsumerCount {
 		wg.Go(func() {
-			consumer, err := newConsumer(conf)
+			consumer, err := newConsumer(conf, pool)
 			if err != nil {
 				errCh <- fmt.Errorf("creating consumer: %w", err)
 				return
@@ -72,7 +88,7 @@ func run() int {
 	return 0
 }
 
-func newConsumer(conf config.MailSender) (kgoconsumer.Consumer, error) {
+func newConsumer(conf config.MailSender, pool *pgxpool.Pool) (kgoconsumer.Consumer, error) {
 	kafkaClient, err := kgoconsumer.NewClient(
 		conf.KafkaSeeds,
 		conf.AlarmsTopicConsumerGroup,
@@ -84,28 +100,13 @@ func newConsumer(conf config.MailSender) (kgoconsumer.Consumer, error) {
 
 	auth := smtp.PlainAuth("", conf.SMTPUsername, conf.SMTPPassword, conf.SMTPHost)
 	mailSender := mail.NewAlarmMailSender(auth, conf.SMTPAddr(), conf.MailFrom, conf.MailTo)
+	alarmRaiser := alarm.NewAlarmRaiser(mailSender)
 
-	recordConsumer := func(ctx context.Context, record *kgo.Record) error {
-		return consumeAlarm(ctx, mailSender, record)
-	}
-	return kgoconsumer.NewConsumer(kafkaClient, conf.AlarmsDLQTopic, recordConsumer)
-}
-
-func consumeAlarm(ctx context.Context, mailSender mail.AlarmMailSender, record *kgo.Record) error {
-	raiseRecord, ok, err := kafka.MapToRaiseAlarmRecord(record)
-	if err != nil {
-		return fmt.Errorf("mapping record to alarmRaiseRecord %v: %w", record, err)
-	}
-	if ok {
-		return mailSender.RaiseAlarm(ctx, raiseRecord.PlayerID, raiseRecord.AlarmValue, raiseRecord.Value)
+	actions := []saga.Action[alarm.RaiseAlarmCommand, alarm.ClearAlarmCommand]{
+		alarmRaiser,
 	}
 
-	clearRecord, ok, err := kafka.MapToClearAlarmRecord(record)
-	if err != nil {
-		return fmt.Errorf("mapping record to alarmClearRecord %v: %w", record, err)
-	}
-	if !ok {
-		return fmt.Errorf("unparsable record %v", record)
-	}
-	return mailSender.ClearAlarm(ctx, clearRecord.PlayerID)
+	sagaConsumer := saga.NewConsumer(actions, postgres.NewAlarmConsumerRepository())
+
+	return kafka.NewAlarmSagaConsumer(kafkaClient, pool, conf.AlarmsDLQTopic, sagaConsumer)
 }

@@ -3,6 +3,9 @@ package tx
 import (
 	"context"
 	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/mat-sik/saga-go/examples/internal/domain/alarm"
 )
 
 type AggregatePortOut interface {
@@ -12,14 +15,14 @@ type AggregatePortOut interface {
 
 type AggregateSagaAction struct {
 	portOut            AggregatePortOut
-	alarmValueProvider AlarmValueProvider
-	alarmRaiser        AlarmRaiser
+	alarmValueProvider alarm.ValueProvider
+	alarmRaiser        alarm.Raiser
 }
 
 func NewAggregateSagaAction(
 	portOut AggregatePortOut,
-	alarmValueProvider AlarmValueProvider,
-	alarmRaiser AlarmRaiser,
+	alarmValueProvider alarm.ValueProvider,
+	alarmRaiser alarm.Raiser,
 ) AggregateSagaAction {
 	return AggregateSagaAction{
 		portOut:            portOut,
@@ -56,17 +59,25 @@ func (a AggregateSagaAction) Compensate(ctx context.Context, cmd UnregisterComma
 }
 
 func (a AggregateSagaAction) updateAlarmState(ctx context.Context, playerID string, deltaValue, updatedValue int) error {
-	alarmValue, err := a.alarmValueProvider.provide(ctx, playerID)
+	alarmValue, err := a.alarmValueProvider.Provide(ctx, playerID)
 	if err != nil {
 		return err
 	}
 
 	previousValue := updatedValue - deltaValue
 	switch crossing(previousValue, updatedValue, alarmValue) {
-	case crossedBelow:
-		return a.alarmRaiser.ClearAlarm(ctx, playerID)
 	case crossedAbove:
-		return a.alarmRaiser.RaiseAlarm(ctx, playerID, alarmValue, updatedValue)
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generating raise alarm UUIDv7: %w", err)
+		}
+		return a.alarmRaiser.Execute(ctx, alarm.NewRaiseAlarmCommand(id.String(), playerID, deltaValue, updatedValue))
+	case crossedBelow:
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generating clear alarm UUIDv7: %w", err)
+		}
+		return a.alarmRaiser.Compensate(ctx, alarm.NewClearAlarmCommand(id.String(), playerID))
 	default:
 		return nil
 	}

@@ -10,8 +10,12 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-func Run(pool *pgxpool.Pool) error {
-	return run(pool, "db/migrations")
+func RunTxConsumer(pool *pgxpool.Pool) error {
+	return run(pool, "db/migrations/tx-consumer")
+}
+
+func RunSagaConsumer(pool *pgxpool.Pool) error {
+	return run(pool, "db/migrations/saga-consumer")
 }
 
 func run(pool *pgxpool.Pool, dir string) (err error) {

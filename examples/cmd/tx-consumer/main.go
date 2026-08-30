@@ -15,6 +15,7 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/adapters/postgres"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/static"
 	"github.com/mat-sik/saga-go/examples/internal/config"
+	"github.com/mat-sik/saga-go/examples/internal/domain/alarm"
 	"github.com/mat-sik/saga-go/examples/internal/domain/count"
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
@@ -43,7 +44,7 @@ func run() int {
 	}
 	defer pool.Close()
 
-	if err = migrations.Run(pool); err != nil {
+	if err = migrations.RunTxConsumer(pool); err != nil {
 		slog.Error("running tx-consumer migrations", "err", err)
 		return 1
 	}
@@ -99,8 +100,8 @@ func newConsumer(conf config.TxConsumer, pool *pgxpool.Pool) (kgoconsumer.Consum
 	}
 
 	aggregateRepository := postgres.NewAggregateRepository()
-	alarmValueProvider := tx.NewAlarmValueProvider(static.NewAlarmValueProvider(conf.AlarmValue))
-	alarmRaiser := tx.NewAlarmRaiser(kafka.NewAlarmProducer(kafkaClient.ToKgo(), conf.AlarmTopic))
+	alarmValueProvider := alarm.NewAlarmValueProvider(static.NewAlarmValueProvider(conf.AlarmValue))
+	alarmRaiser := alarm.NewAlarmRaiser(kafka.NewAlarmProducer(kafkaClient.ToKgo(), conf.AlarmTopic))
 
 	aggregateAction := tx.NewAggregateSagaAction(aggregateRepository, alarmValueProvider, alarmRaiser)
 
@@ -108,14 +109,14 @@ func newConsumer(conf config.TxConsumer, pool *pgxpool.Pool) (kgoconsumer.Consum
 
 	txAction := tx.NewSagaAction(logAction, aggregateAction)
 
-	countAction := count.NewSagaAction(postgres.NewCountRepository())
+	countAction := count.NewSagaAction[tx.RegisterCommand, tx.UnregisterCommand](postgres.NewCountRepository())
 
 	actions := []saga.Action[tx.RegisterCommand, tx.UnregisterCommand]{
 		txAction,
 		countAction,
 	}
 
-	sagaConsumer := saga.NewConsumer(actions, postgres.NewConsumerRepository())
+	sagaConsumer := saga.NewConsumer(actions, postgres.NewTxConsumerRepository())
 
-	return kafka.NewSagaConsumer(kafkaClient, pool, conf.TransactionsDLQTopic, sagaConsumer)
+	return kafka.NewTxSagaConsumer(kafkaClient, pool, conf.TransactionsDLQTopic, sagaConsumer)
 }

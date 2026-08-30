@@ -35,7 +35,7 @@ func (r RandomValidator) Validate(_ context.Context, _ tx.RegisterCommand) (bool
 func (r RandomValidator) Compensate(ctx context.Context, registerCommand tx.RegisterCommand) error {
 	transactionID, err := uuid.NewV7()
 	if err != nil {
-		return fmt.Errorf("generating UUIDv7: %w", err)
+		return fmt.Errorf("generating compensate transaction UUIDv7: %w", err)
 	}
 
 	record, err := r.newRecord(transactionID.String(), mapToUnregisterRecord(registerCommand))

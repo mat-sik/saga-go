@@ -8,6 +8,7 @@ import (
 )
 
 type MailSender struct {
+	DatabaseURL              string   `env:"MAIL_SENDER_DATABASE_URL"`
 	KafkaSeeds               []string `env:"MAIL_SENDER_KAFKA_SEEDS"`
 	AlarmsTopic              string   `env:"MAIL_SENDER_KAFKA_ALARMS_TOPIC"`
 	AlarmsDLQTopic           string   `env:"MAIL_SENDER_KAFKA_ALARMS_DLQ_TOPIC"`

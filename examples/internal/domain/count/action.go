@@ -3,8 +3,6 @@ package count
 import (
 	"context"
 	"fmt"
-
-	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
 )
 
 type PortOut interface {
@@ -12,24 +10,24 @@ type PortOut interface {
 	Decrement(ctx context.Context) error
 }
 
-type SagaAction struct {
+type SagaAction[T, CT any] struct {
 	portOut PortOut
 }
 
-func NewSagaAction(portOut PortOut) SagaAction {
-	return SagaAction{
+func NewSagaAction[T, CT any](portOut PortOut) SagaAction[T, CT] {
+	return SagaAction[T, CT]{
 		portOut: portOut,
 	}
 }
 
-func (a SagaAction) Execute(ctx context.Context, _ tx.RegisterCommand) error {
+func (a SagaAction[T, CT]) Execute(ctx context.Context, _ T) error {
 	if err := a.portOut.Increment(ctx); err != nil {
 		return fmt.Errorf("incrementing count: %w", err)
 	}
 	return nil
 }
 
-func (a SagaAction) Compensate(ctx context.Context, _ tx.UnregisterCommand) error {
+func (a SagaAction[T, CT]) Compensate(ctx context.Context, _ CT) error {
 	if err := a.portOut.Decrement(ctx); err != nil {
 		return fmt.Errorf("decrementing count: %w", err)
 	}

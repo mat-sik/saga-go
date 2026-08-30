@@ -202,7 +202,7 @@ func pickElFromSlice[T any](slice []T) T {
 func randomID() (string, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
-		return "", fmt.Errorf("generating UUIDv7: %w", err)
+		return "", fmt.Errorf("generating transaction UUIDv7: %w", err)
 	}
 	return id.String(), err
 }

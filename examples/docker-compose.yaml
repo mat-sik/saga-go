@@ -18,6 +18,53 @@ services:
     volumes:
       - tx-consumer:/var/lib/postgresql
 
+  tx-validator-db:
+    image: postgres:18.4-alpine
+    restart: on-failure
+    networks:
+      - net
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_DB: tx-validator
+      POSTGRES_USER: tx-validator
+      POSTGRES_PASSWORD: tx-validator
+    healthcheck:
+      test: [ CMD-SHELL, 'pg_isready -U tx-validator -d tx-validator' ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - tx-validator:/var/lib/postgresql
+
+  mail-sender-db:
+    image: postgres:18.4-alpine
+    restart: on-failure
+    networks:
+      - net
+    ports:
+      - '5434:5432'
+    environment:
+      POSTGRES_DB: mail-sender
+      POSTGRES_USER: mail-sender
+      POSTGRES_PASSWORD: mail-sender
+    healthcheck:
+      test: [ CMD-SHELL, 'pg_isready -U mail-sender -d mail-sender' ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - mail-sender:/var/lib/postgresql
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    restart: on-failure
+    networks:
+      - net
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+
   kafka-broker:
     image: apache/kafka:4.3.1
     restart: on-failure
@@ -72,6 +119,8 @@ services:
 
 volumes:
   tx-consumer:
+  tx-validator:
+  mail-sender:
   kafka-broker-data:
 
 networks:

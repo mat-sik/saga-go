@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/smtp"
+
+	"github.com/mat-sik/saga-go/examples/internal/domain/alarm"
 )
 
 type AlarmMailSender struct {
@@ -22,8 +24,8 @@ func NewAlarmMailSender(auth smtp.Auth, addr, from, to string) AlarmMailSender {
 	}
 }
 
-func (a AlarmMailSender) RaiseAlarm(_ context.Context, playerID string, alarmValue, value int) error {
-	msg := raiseAlarmMessage(playerID, alarmValue, value)
+func (a AlarmMailSender) RaiseAlarm(_ context.Context, cmd alarm.RaiseAlarmCommand) error {
+	msg := raiseAlarmMessage(cmd.PlayerID, cmd.AlarmValue, cmd.Value)
 	return a.send(msg)
 }
 
@@ -34,8 +36,8 @@ func raiseAlarmMessage(playerID string, alarmValue, value int) string {
 	return fmt.Sprintf(messageFormat, playerID, alarmValue, value, alarmValue, value)
 }
 
-func (a AlarmMailSender) ClearAlarm(_ context.Context, playerID string) error {
-	msg := clearAlarmMessage(playerID)
+func (a AlarmMailSender) ClearAlarm(_ context.Context, cmd alarm.ClearAlarmCommand) error {
+	msg := clearAlarmMessage(cmd.PlayerID)
 	return a.send(msg)
 }
 

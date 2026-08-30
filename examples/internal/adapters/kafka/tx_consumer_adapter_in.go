@@ -15,7 +15,7 @@ import (
 )
 
 // TODO: add transient and pernament errors in the adapters and domain logic
-func NewSagaConsumer(
+func NewTxSagaConsumer(
 	client kgoconsumer.Client,
 	pool *pgxpool.Pool,
 	dlqTopic string,
@@ -41,7 +41,7 @@ type kgoSagaConsumer struct {
 }
 
 func (k kgoSagaConsumer) consumeRecord(ctx context.Context, record *kgo.Record) (err error) {
-	command, err := MapToCommand(record)
+	command, err := mapToTxCommand(record)
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func (k kgoSagaConsumer) consumeRecord(ctx context.Context, record *kgo.Record) 
 	return postgres.WithTx(ctx, k.pool, consume)
 }
 
-func MapToCommand(record *kgo.Record) (saga.Command[tx.RegisterCommand, tx.UnregisterCommand], error) {
+func mapToTxCommand(record *kgo.Record) (saga.Command[tx.RegisterCommand, tx.UnregisterCommand], error) {
 	cmdType, err := headerValue(record, CmdTypeHeader)
 	if err != nil {
 		return nil, err
@@ -90,17 +90,7 @@ type RegisterRecord struct {
 }
 
 func (r RegisterRecord) toRegisterCommand(transactionID string) tx.RegisterCommand {
-	return tx.RegisterCommand{
-		RegisterID: tx.RegisterID{
-			ID: tx.ID{
-				TransactionID: transactionID,
-				PlayerID:      r.PlayerID,
-				Currency:      r.Currency,
-			},
-			Time: r.Time,
-		},
-		Value: r.Value,
-	}
+	return tx.NewRegisterCommand(transactionID, r.PlayerID, r.Currency, r.Time, r.Value)
 }
 
 type UnregisterRecord struct {
@@ -110,11 +100,8 @@ type UnregisterRecord struct {
 }
 
 func (r UnregisterRecord) toUnregisterCommand(transactionID string) tx.UnregisterCommand {
-	return tx.UnregisterCommand{
-		ID:              transactionID,
-		RegisterCommand: r.RegisterRecord.toRegisterCommand(r.RegisterRecordTransactionID),
-		Time:            r.Time,
-	}
+	registerCommand := r.RegisterRecord.toRegisterCommand(r.RegisterRecordTransactionID)
+	return tx.NewUnregisterCommand(transactionID, r.Time, registerCommand)
 }
 
 func headerValue(record *kgo.Record, key string) (string, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/mat-sik/saga-go/examples/internal/domain/alarm"
 	"github.com/mat-sik/saga-go/saga"
 )
 
@@ -130,13 +131,9 @@ func TestAggregateSagaAction(t *testing.T) {
 			aggregatePortOut, alarmValueProviderPortOut, alarmRaiserPortOut := writeInitState(tt.initState)
 
 			aggregateSagaAction := AggregateSagaAction{
-				portOut: &aggregatePortOut,
-				alarmValueProvider: AlarmValueProvider{
-					portOut: alarmValueProviderPortOut,
-				},
-				alarmRaiser: AlarmRaiser{
-					portOut: &alarmRaiserPortOut,
-				},
+				portOut:            &aggregatePortOut,
+				alarmValueProvider: alarm.NewAlarmValueProvider(alarmValueProviderPortOut),
+				alarmRaiser:        alarm.NewAlarmRaiser(&alarmRaiserPortOut),
 			}
 
 			for _, cmd := range tt.cmd {
@@ -213,12 +210,12 @@ type testAlarmRaiserPortOut struct {
 	alarmRaised bool
 }
 
-func (t *testAlarmRaiserPortOut) RaiseAlarm(context.Context, string, int, int) error {
+func (t *testAlarmRaiserPortOut) RaiseAlarm(context.Context, alarm.RaiseAlarmCommand) error {
 	t.alarmRaised = true
 	return nil
 }
 
-func (t *testAlarmRaiserPortOut) ClearAlarm(context.Context, string) error {
+func (t *testAlarmRaiserPortOut) ClearAlarm(context.Context, alarm.ClearAlarmCommand) error {
 	t.alarmRaised = false
 	return nil
 }

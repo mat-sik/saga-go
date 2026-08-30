@@ -8,6 +8,7 @@ import (
 )
 
 type TxValidator struct {
+	DatabaseURL                    string   `env:"TX_VALIDATOR_DATABASE_URL"`
 	KafkaSeeds                     []string `env:"TX_VALIDATOR_KAFKA_SEEDS"`
 	TransactionsTopic              string   `env:"TX_VALIDATOR_KAFKA_TRANSACTIONS_TOPIC"`
 	TransactionsDLQTopic           string   `env:"TX_VALIDATOR_KAFKA_TRANSACTIONS_DLQ_TOPIC"`

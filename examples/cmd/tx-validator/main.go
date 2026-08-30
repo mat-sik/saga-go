@@ -10,11 +10,14 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/kafka"
+	"github.com/mat-sik/saga-go/examples/internal/adapters/postgres"
 	"github.com/mat-sik/saga-go/examples/internal/config"
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
-	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/mat-sik/saga-go/examples/internal/migrations"
+	"github.com/mat-sik/saga-go/saga"
 )
 
 func main() {
@@ -31,6 +34,18 @@ func run() int {
 		return 1
 	}
 
+	pool, err := pgxpool.New(ctx, conf.DatabaseURL)
+	if err != nil {
+		slog.Error("creating pgx pool", "err", err)
+		return 1
+	}
+	defer pool.Close()
+
+	if err = migrations.RunSagaConsumer(pool); err != nil {
+		slog.Error("running tx-consumer migrations", "err", err)
+		return 1
+	}
+
 	errCh := make(chan error, conf.ConsumerCount)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -39,7 +54,7 @@ func run() int {
 	var wg sync.WaitGroup
 	for range conf.ConsumerCount {
 		wg.Go(func() {
-			consumer, err := newConsumer(conf)
+			consumer, err := newConsumer(conf, pool)
 			if err != nil {
 				errCh <- fmt.Errorf("creating consumer: %w", err)
 				return
@@ -71,7 +86,7 @@ func run() int {
 	return 0
 }
 
-func newConsumer(conf config.TxValidator) (kgoconsumer.Consumer, error) {
+func newConsumer(conf config.TxValidator, pool *pgxpool.Pool) (kgoconsumer.Consumer, error) {
 	kafkaClient, err := kgoconsumer.NewClient(
 		conf.KafkaSeeds,
 		conf.TransactionsTopicConsumerGroup,
@@ -83,33 +98,11 @@ func newConsumer(conf config.TxValidator) (kgoconsumer.Consumer, error) {
 
 	validator := tx.NewValidator(kafka.NewRandomValidator(kafkaClient.ToKgo(), conf.TransactionsTopic, conf.CompensatePercent))
 
-	recordConsumer := func(ctx context.Context, record *kgo.Record) error {
-		return consumeRegisterRecord(ctx, validator, record)
+	actions := []saga.Action[tx.RegisterCommand, tx.UnregisterCommand]{
+		validator,
 	}
 
-	return kgoconsumer.NewConsumer(kafkaClient, conf.TransactionsDLQTopic, recordConsumer)
-}
+	sagaConsumer := saga.NewConsumer(actions, postgres.NewTxConsumerRepository())
 
-func consumeRegisterRecord(ctx context.Context, validator tx.Validator, record *kgo.Record) error {
-	registerCommand, ok, err := mapToRegisterCommand(record)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return nil
-	}
-	return validator.ValidateAndCompensate(ctx, registerCommand)
-}
-
-func mapToRegisterCommand(record *kgo.Record) (tx.RegisterCommand, bool, error) {
-	command, err := kafka.MapToCommand(record)
-	if err != nil {
-		return tx.RegisterCommand{}, false, fmt.Errorf("mapping to command %v: %w", record, err)
-	}
-
-	registerCommand, ok := command.ToTransaction()
-	if !ok {
-		return tx.RegisterCommand{}, false, fmt.Errorf("mapping to register command %v: %w", command, err)
-	}
-	return registerCommand, true, nil
+	return kafka.NewTxSagaConsumer(kafkaClient, pool, conf.TransactionsDLQTopic, sagaConsumer)
 }

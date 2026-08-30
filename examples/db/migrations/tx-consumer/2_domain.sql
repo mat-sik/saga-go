@@ -39,18 +39,8 @@ CREATE TABLE compensating_transaction_logs
 CREATE INDEX idx_compensating_transaction_logs_compensated_transaction_id
     ON compensating_transaction_logs (compensated_transaction_id);
 
-CREATE TABLE processed_transactions
-(
-    transaction_id             uuid NOT NULL,
-    compensated_transaction_id uuid DEFAULT NULL,
-    PRIMARY KEY (transaction_id)
-);
-
-CREATE INDEX idx_processed_transactions_compensated_transaction_id
-    ON processed_transactions (compensated_transaction_id);
-
 -- +goose Down
+DROP TABLE counts;
 DROP TABLE compensating_transaction_logs;
 DROP TABLE transaction_logs;
 DROP TABLE transactions_aggregates;
-DROP TABLE counts;

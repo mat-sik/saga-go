@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/mat-sik/saga-go/examples/internal/domain/alarm"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -20,29 +21,31 @@ func NewAlarmProducer(client *kgo.Client, topic string) AlarmProducer {
 	}
 }
 
-func (a AlarmProducer) RaiseAlarm(ctx context.Context, playerID string, alarmValue, value int) error {
+func (a AlarmProducer) RaiseAlarm(ctx context.Context, cmd alarm.RaiseAlarmCommand) error {
 	payload := RaiseAlarmRecord{
-		PlayerID:   playerID,
-		AlarmValue: alarmValue,
-		Value:      value,
+		ID:         cmd.ID,
+		PlayerID:   cmd.PlayerID,
+		AlarmValue: cmd.AlarmValue,
+		Value:      cmd.Value,
 	}
-	return a.produce(ctx, playerID, payload, AlarmTypeRaise)
+	return a.produce(ctx, cmd.PlayerID, payload, AlarmTypeRaise)
 }
 
-func (a AlarmProducer) ClearAlarm(ctx context.Context, playerID string) error {
+func (a AlarmProducer) ClearAlarm(ctx context.Context, cmd alarm.ClearAlarmCommand) error {
 	payload := ClearAlarmRecord{
-		PlayerID: playerID,
+		ID:       cmd.ID,
+		PlayerID: cmd.PlayerID,
 	}
-	return a.produce(ctx, playerID, payload, AlarmTypeClear)
+	return a.produce(ctx, cmd.PlayerID, payload, AlarmTypeClear)
 }
 
-func (a AlarmProducer) produce(ctx context.Context, playerID string, payload any, alarmType string) error {
+func (a AlarmProducer) produce(ctx context.Context, key string, payload any, alarmType string) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshaling record %v: %w", payload, err)
 	}
 	record := &kgo.Record{
-		Key:   []byte(playerID),
+		Key:   []byte(key),
 		Value: body,
 		Headers: []kgo.RecordHeader{
 			{
@@ -57,43 +60,15 @@ func (a AlarmProducer) produce(ctx context.Context, playerID string, payload any
 }
 
 type RaiseAlarmRecord struct {
+	ID         string `json:"id"`
 	PlayerID   string `json:"playerID"`
 	AlarmValue int    `json:"alarmValue"`
 	Value      int    `json:"value"`
 }
 
-func MapToRaiseAlarmRecord(record *kgo.Record) (RaiseAlarmRecord, bool, error) {
-	alarmType, err := headerValue(record, AlarmTypeHeader)
-	if err != nil {
-		return RaiseAlarmRecord{}, false, err
-	}
-	if alarmType != AlarmTypeRaise {
-		return RaiseAlarmRecord{}, false, nil
-	}
-	var out RaiseAlarmRecord
-	if err := json.Unmarshal(record.Value, &out); err != nil {
-		return RaiseAlarmRecord{}, false, fmt.Errorf("unmarshaling raiseAlarmRecord %v: %w", record, err)
-	}
-	return out, true, nil
-}
-
 type ClearAlarmRecord struct {
+	ID       string `json:"id"`
 	PlayerID string `json:"playerID"`
-}
-
-func MapToClearAlarmRecord(record *kgo.Record) (ClearAlarmRecord, bool, error) {
-	alarmType, err := headerValue(record, AlarmTypeHeader)
-	if err != nil {
-		return ClearAlarmRecord{}, false, err
-	}
-	if alarmType != AlarmTypeClear {
-		return ClearAlarmRecord{}, false, nil
-	}
-	var out ClearAlarmRecord
-	if err := json.Unmarshal(record.Value, &out); err != nil {
-		return ClearAlarmRecord{}, false, fmt.Errorf("unmarshaling clearAlarmRecord %v: %w", record, err)
-	}
-	return out, true, nil
 }
 
 const (
