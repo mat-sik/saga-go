@@ -103,19 +103,26 @@ func (r RegisterRecord) toRegisterCommand(transactionID string) tx.RegisterComma
 }
 
 type UnregisterRecord struct {
-	RegisterRecordTransactionID string         `json:"registerRecordTransactionID"`
+	ID                          string         `json:"id"`
 	Time                        time.Time      `json:"time"`
+	RegisterRecordTransactionID string         `json:"registerRecordTransactionID"`
 	RegisterRecord              RegisterRecord `json:"registerRecord"`
 }
 
-func NewUnregisterRecord(cmd tx.RegisterCommand, time time.Time) UnregisterRecord {
+func NewUnregisterRecord(id string, time time.Time, cmd tx.RegisterCommand) UnregisterRecord {
 	registerID := cmd.RegisterID
-	id := registerID.ID
+	registerRecordID := registerID.ID
 
 	return UnregisterRecord{
-		RegisterRecordTransactionID: id.TransactionID,
+		ID:                          id,
 		Time:                        time,
-		RegisterRecord:              NewRegisterRecord(id.PlayerID, id.Currency, cmd.Value, registerID.Time),
+		RegisterRecordTransactionID: registerRecordID.TransactionID,
+		RegisterRecord: NewRegisterRecord(
+			registerRecordID.PlayerID,
+			registerRecordID.Currency,
+			cmd.Value,
+			registerID.Time,
+		),
 	}
 }
 

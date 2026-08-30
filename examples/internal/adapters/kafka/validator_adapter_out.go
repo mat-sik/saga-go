@@ -33,12 +33,13 @@ func (r RandomValidator) Validate(_ context.Context, _ tx.RegisterCommand) (bool
 }
 
 func (r RandomValidator) Compensate(ctx context.Context, registerCommand tx.RegisterCommand) error {
-	transactionID, err := uuid.NewV7()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return fmt.Errorf("generating compensate transaction UUIDv7: %w", err)
 	}
 
-	record, err := r.newRecord(transactionID.String(), NewUnregisterRecord(registerCommand, time.Now()))
+	unregisterRecord := NewUnregisterRecord(id.String(), time.Now(), registerCommand)
+	record, err := r.newRecord(unregisterRecord)
 	if err != nil {
 		return err
 	}
@@ -46,13 +47,13 @@ func (r RandomValidator) Compensate(ctx context.Context, registerCommand tx.Regi
 	return r.client.ProduceSync(ctx, record).FirstErr()
 }
 
-func (r RandomValidator) newRecord(transactionID string, unregisterRecord UnregisterRecord) (*kgo.Record, error) {
+func (r RandomValidator) newRecord(unregisterRecord UnregisterRecord) (*kgo.Record, error) {
 	body, err := json.Marshal(unregisterRecord)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling %v: %w", unregisterRecord, err)
 	}
 
-	key := transactionID
+	key := unregisterRecord.RegisterRecordTransactionID
 	return &kgo.Record{
 		Key:   []byte(key),
 		Value: body,
