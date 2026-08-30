@@ -53,7 +53,6 @@ func (a AlarmProducer) produce(ctx context.Context, key string, payload any, ala
 
 type RaiseAlarmRecord struct {
 	ID         string `json:"id"`
-	PlayerID   string `json:"playerID"`
 	AlarmValue int    `json:"alarmValue"`
 	Value      int    `json:"value"`
 }
@@ -61,30 +60,27 @@ type RaiseAlarmRecord struct {
 func newRaiseAlarmRecord(cmd alarm.RaiseAlarmCommand) RaiseAlarmRecord {
 	return RaiseAlarmRecord{
 		ID:         cmd.ID,
-		PlayerID:   cmd.PlayerID,
 		AlarmValue: cmd.AlarmValue,
 		Value:      cmd.Value,
 	}
 }
 
-func (r RaiseAlarmRecord) toRaiseAlarmCommand() alarm.RaiseAlarmCommand {
-	return alarm.NewRaiseAlarmCommand(r.ID, r.PlayerID, r.AlarmValue, r.Value)
+func (r RaiseAlarmRecord) toRaiseAlarmCommand(playerID string) alarm.RaiseAlarmCommand {
+	return alarm.NewRaiseAlarmCommand(r.ID, playerID, r.AlarmValue, r.Value)
 }
 
 type ClearAlarmRecord struct {
-	ID       string `json:"id"`
-	PlayerID string `json:"playerID"`
+	ID string `json:"id"`
 }
 
 func newClearAlarmRecord(cmd alarm.ClearAlarmCommand) ClearAlarmRecord {
 	return ClearAlarmRecord{
-		ID:       cmd.ID,
-		PlayerID: cmd.PlayerID,
+		ID: cmd.ID,
 	}
 }
 
-func (r ClearAlarmRecord) toClearAlarmCommand() alarm.ClearAlarmCommand {
-	return alarm.NewClearAlarmCommand(r.ID, r.PlayerID)
+func (r ClearAlarmRecord) toClearAlarmCommand(playerID string) alarm.ClearAlarmCommand {
+	return alarm.NewClearAlarmCommand(r.ID, playerID)
 }
 
 const (
