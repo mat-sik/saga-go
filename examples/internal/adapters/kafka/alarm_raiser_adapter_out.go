@@ -22,20 +22,12 @@ func NewAlarmProducer(client *kgo.Client, topic string) AlarmProducer {
 }
 
 func (a AlarmProducer) RaiseAlarm(ctx context.Context, cmd alarm.RaiseAlarmCommand) error {
-	payload := RaiseAlarmRecord{
-		ID:         cmd.ID,
-		PlayerID:   cmd.PlayerID,
-		AlarmValue: cmd.AlarmValue,
-		Value:      cmd.Value,
-	}
+	payload := newRaiseAlarmRecord(cmd)
 	return a.produce(ctx, cmd.PlayerID, payload, AlarmTypeRaise)
 }
 
 func (a AlarmProducer) ClearAlarm(ctx context.Context, cmd alarm.ClearAlarmCommand) error {
-	payload := ClearAlarmRecord{
-		ID:       cmd.ID,
-		PlayerID: cmd.PlayerID,
-	}
+	payload := newClearAlarmRecord(cmd)
 	return a.produce(ctx, cmd.PlayerID, payload, AlarmTypeClear)
 }
 
@@ -66,9 +58,33 @@ type RaiseAlarmRecord struct {
 	Value      int    `json:"value"`
 }
 
+func newRaiseAlarmRecord(cmd alarm.RaiseAlarmCommand) RaiseAlarmRecord {
+	return RaiseAlarmRecord{
+		ID:         cmd.ID,
+		PlayerID:   cmd.PlayerID,
+		AlarmValue: cmd.AlarmValue,
+		Value:      cmd.Value,
+	}
+}
+
+func (r RaiseAlarmRecord) toRaiseAlarmCommand() alarm.RaiseAlarmCommand {
+	return alarm.NewRaiseAlarmCommand(r.ID, r.PlayerID, r.AlarmValue, r.Value)
+}
+
 type ClearAlarmRecord struct {
 	ID       string `json:"id"`
 	PlayerID string `json:"playerID"`
+}
+
+func newClearAlarmRecord(cmd alarm.ClearAlarmCommand) ClearAlarmRecord {
+	return ClearAlarmRecord{
+		ID:       cmd.ID,
+		PlayerID: cmd.PlayerID,
+	}
+}
+
+func (r ClearAlarmRecord) toClearAlarmCommand() alarm.ClearAlarmCommand {
+	return alarm.NewClearAlarmCommand(r.ID, r.PlayerID)
 }
 
 const (

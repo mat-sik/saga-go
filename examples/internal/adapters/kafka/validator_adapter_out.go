@@ -38,28 +38,12 @@ func (r RandomValidator) Compensate(ctx context.Context, registerCommand tx.Regi
 		return fmt.Errorf("generating compensate transaction UUIDv7: %w", err)
 	}
 
-	record, err := r.newRecord(transactionID.String(), mapToUnregisterRecord(registerCommand))
+	record, err := r.newRecord(transactionID.String(), NewUnregisterRecord(registerCommand, time.Now()))
 	if err != nil {
 		return err
 	}
 
 	return r.client.ProduceSync(ctx, record).FirstErr()
-}
-
-func mapToUnregisterRecord(registerCommand tx.RegisterCommand) UnregisterRecord {
-	registerID := registerCommand.RegisterID
-	id := registerID.ID
-
-	return UnregisterRecord{
-		RegisterRecord: RegisterRecord{
-			PlayerID: id.PlayerID,
-			Currency: id.Currency,
-			Value:    registerCommand.Value,
-			Time:     registerID.Time,
-		},
-		RegisterRecordTransactionID: id.TransactionID,
-		Time:                        time.Now(),
-	}
 }
 
 func (r RandomValidator) newRecord(transactionID string, unregisterRecord UnregisterRecord) (*kgo.Record, error) {

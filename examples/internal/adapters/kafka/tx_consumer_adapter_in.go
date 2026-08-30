@@ -89,14 +89,34 @@ type RegisterRecord struct {
 	Time     time.Time `json:"time"`
 }
 
+func NewRegisterRecord(playerID, currency string, value int, time time.Time) RegisterRecord {
+	return RegisterRecord{
+		PlayerID: playerID,
+		Currency: currency,
+		Value:    value,
+		Time:     time,
+	}
+}
+
 func (r RegisterRecord) toRegisterCommand(transactionID string) tx.RegisterCommand {
 	return tx.NewRegisterCommand(transactionID, r.PlayerID, r.Currency, r.Time, r.Value)
 }
 
 type UnregisterRecord struct {
-	RegisterRecord              RegisterRecord `json:"registerRecord"`
 	RegisterRecordTransactionID string         `json:"registerRecordTransactionID"`
 	Time                        time.Time      `json:"time"`
+	RegisterRecord              RegisterRecord `json:"registerRecord"`
+}
+
+func NewUnregisterRecord(cmd tx.RegisterCommand, time time.Time) UnregisterRecord {
+	registerID := cmd.RegisterID
+	id := registerID.ID
+
+	return UnregisterRecord{
+		RegisterRecordTransactionID: id.TransactionID,
+		Time:                        time,
+		RegisterRecord:              NewRegisterRecord(id.PlayerID, id.Currency, cmd.Value, registerID.Time),
+	}
 }
 
 func (r UnregisterRecord) toUnregisterCommand(transactionID string) tx.UnregisterCommand {

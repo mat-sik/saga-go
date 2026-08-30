@@ -51,22 +51,14 @@ func mapToAlarmCommand(record *kgo.Record) (saga.Command[alarm.RaiseAlarmCommand
 		if err := json.Unmarshal(record.Value, &alarmRecord); err != nil {
 			return nil, fmt.Errorf("unmarshaling raiseAlarmRecord %v: %w", record, err)
 		}
-		return newRaiseAlarmCommand(alarmRecord), nil
+		return alarmRecord.toRaiseAlarmCommand(), nil
 	case AlarmTypeClear:
 		var alarmRecord ClearAlarmRecord
 		if err := json.Unmarshal(record.Value, &alarmRecord); err != nil {
 			return nil, fmt.Errorf("unmarshaling clearAlarmRecord %v: %w", record, err)
 		}
-		return newClearAlarmCommand(alarmRecord), nil
+		return alarmRecord.toClearAlarmCommand(), nil
 	default:
 		return nil, fmt.Errorf("unsupported alarmType %s", alarmType)
 	}
-}
-
-func newRaiseAlarmCommand(record RaiseAlarmRecord) alarm.RaiseAlarmCommand {
-	return alarm.NewRaiseAlarmCommand(record.ID, record.PlayerID, record.AlarmValue, record.Value)
-}
-
-func newClearAlarmCommand(record ClearAlarmRecord) alarm.ClearAlarmCommand {
-	return alarm.NewClearAlarmCommand(record.ID, record.PlayerID)
 }

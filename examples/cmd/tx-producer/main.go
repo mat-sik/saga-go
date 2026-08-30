@@ -145,17 +145,11 @@ func nextNDays(amount int) []time.Time {
 }
 
 func (g recordGenerator) generateRecord() (*kgo.Record, error) {
-	registerRecord := kafka.RegisterRecord{
-		PlayerID: g.pickPlayerID(),
-		Currency: g.pickCurrency(),
-		Value:    g.pickValue(),
-		Time:     g.pickDay(),
-	}
+	registerRecord := kafka.NewRegisterRecord(g.pickPlayerID(), g.pickCurrency(), g.pickValue(), g.pickDay())
 	return g.newRecord(g.pickTransactionID(), registerRecord)
 }
 
 func (g recordGenerator) newRecord(transactionID string, registerRecord kafka.RegisterRecord) (*kgo.Record, error) {
-
 	body, err := json.Marshal(registerRecord)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling %v: %w", registerRecord, err)
