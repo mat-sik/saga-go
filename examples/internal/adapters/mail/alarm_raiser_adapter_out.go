@@ -34,10 +34,10 @@ func raiseAlarmMessage(from, to, playerID string, alarmValue, value int) string 
 		"To: %s\r\n" +
 		"Subject: Alarm for player %s %d/%d\r\n" +
 		"\r\n" +
-		"alarm value: %d\r\n" +
-		"value: %d\r\n"
+		"value: %d\r\n" +
+		"alarm value: %d\r\n"
 
-	return fmt.Sprintf(messageFormat, from, to, playerID, alarmValue, value, alarmValue, value)
+	return fmt.Sprintf(messageFormat, from, to, playerID, value, alarmValue, value, alarmValue)
 }
 
 func (a AlarmMailSender) ClearAlarm(_ context.Context, cmd alarm.ClearAlarmCommand) error {
