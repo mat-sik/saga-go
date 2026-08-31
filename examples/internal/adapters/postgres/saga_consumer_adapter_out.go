@@ -4,9 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/mat-sik/saga-go/examples/internal/txctx"
 )
 
@@ -53,7 +58,11 @@ func transactionCompensated(ctx context.Context, tx pgx.Tx, transactionID string
 	return alreadyCompensated, nil
 }
 
-func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(ctx context.Context) error) error {
+func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(ctx context.Context) error) (err error) {
+	defer func() {
+		err = wrapIfTransient(err)
+	}()
+
 	pgxTx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("beginning tx: %w", err)
@@ -64,9 +73,7 @@ func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(ctx context.Context
 			if rollbackErr := pgxTx.Rollback(ctx); rollbackErr != nil {
 				err = errors.Join(err, fmt.Errorf("rolling back: %w", rollbackErr))
 			}
-			return
-		}
-		if commitErr := pgxTx.Commit(ctx); commitErr != nil {
+		} else if commitErr := pgxTx.Commit(ctx); commitErr != nil {
 			err = errors.Join(err, fmt.Errorf("committing: %w", commitErr))
 		}
 	}()
@@ -74,4 +81,47 @@ func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(ctx context.Context
 	ctx = txctx.WithTx(ctx, pgxTx)
 
 	return fn(ctx)
+}
+
+func wrapIfTransient(err error) error {
+	if err == nil || !isTransient(err) {
+		return err
+	}
+	return errors.Join(err, kgoconsumer.ErrTransient)
+}
+
+func isTransient(err error) bool {
+	switch {
+	case errors.Is(err, pgconn.ErrConnClosed):
+		return true
+	case isOperatorIntervention(err):
+		return true
+	case isConnectError(err):
+		return true
+	case isNetworkFailure(err):
+		return true
+	}
+	return false
+}
+
+func isOperatorIntervention(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		operatorInterventionClass := "57"
+		return strings.HasPrefix(pgErr.Code, operatorInterventionClass)
+	}
+	return false
+}
+
+func isConnectError(err error) bool {
+	var connErr *pgconn.ConnectError
+	return errors.As(err, &connErr)
+}
+
+func isNetworkFailure(err error) bool {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr)
 }
