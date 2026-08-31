@@ -62,21 +62,21 @@ func mapToTxCommand(record *kgo.Record) (saga.Command[tx.RegisterCommand, tx.Unr
 		return nil, err
 	}
 
-	transactionID := string(record.Key)
-
 	switch cmdType {
 	case CmdTypeRegister:
 		var registerRecord RegisterRecord
 		if err = json.Unmarshal(record.Value, &registerRecord); err != nil {
 			return nil, fmt.Errorf("unmarshaling register record: %w", err)
 		}
+		transactionID := string(record.Key)
 		return registerRecord.toRegisterCommand(transactionID), nil
 	case CmdTypeUnregister:
 		var unregisterRecord UnregisterRecord
 		if err = json.Unmarshal(record.Value, &unregisterRecord); err != nil {
 			return nil, fmt.Errorf("unmarshaling unregister record: %w", err)
 		}
-		return unregisterRecord.toUnregisterCommand(transactionID), nil
+		registerRecordTransactionID := string(record.Key)
+		return unregisterRecord.toUnregisterCommand(registerRecordTransactionID), nil
 	default:
 		return nil, fmt.Errorf("unsupported cmdType %s", cmdType)
 	}
@@ -103,10 +103,9 @@ func (r RegisterRecord) toRegisterCommand(transactionID string) tx.RegisterComma
 }
 
 type UnregisterRecord struct {
-	ID                          string         `json:"id"`
-	Time                        time.Time      `json:"time"`
-	RegisterRecordTransactionID string         `json:"registerRecordTransactionID"`
-	RegisterRecord              RegisterRecord `json:"registerRecord"`
+	ID             string         `json:"id"`
+	Time           time.Time      `json:"time"`
+	RegisterRecord RegisterRecord `json:"registerRecord"`
 }
 
 func NewUnregisterRecord(id string, time time.Time, cmd tx.RegisterCommand) UnregisterRecord {
@@ -114,9 +113,8 @@ func NewUnregisterRecord(id string, time time.Time, cmd tx.RegisterCommand) Unre
 	registerRecordID := registerID.ID
 
 	return UnregisterRecord{
-		ID:                          id,
-		Time:                        time,
-		RegisterRecordTransactionID: registerRecordID.TransactionID,
+		ID:   id,
+		Time: time,
 		RegisterRecord: NewRegisterRecord(
 			registerRecordID.PlayerID,
 			registerRecordID.Currency,
@@ -126,9 +124,9 @@ func NewUnregisterRecord(id string, time time.Time, cmd tx.RegisterCommand) Unre
 	}
 }
 
-func (r UnregisterRecord) toUnregisterCommand(transactionID string) tx.UnregisterCommand {
-	registerCommand := r.RegisterRecord.toRegisterCommand(r.RegisterRecordTransactionID)
-	return tx.NewUnregisterCommand(transactionID, r.Time, registerCommand)
+func (r UnregisterRecord) toUnregisterCommand(registerRecordTransactionID string) tx.UnregisterCommand {
+	registerCommand := r.RegisterRecord.toRegisterCommand(registerRecordTransactionID)
+	return tx.NewUnregisterCommand(r.ID, r.Time, registerCommand)
 }
 
 func headerValue(record *kgo.Record, key string) (string, error) {
