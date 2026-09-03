@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"slices"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -15,22 +15,24 @@ import (
 
 // TODO: test case when before cancel context is created, rebalance triggers and processing should be cancelled
 func TestBasicConsume(t *testing.T) {
-	topic := newTopicName(t, "basic-consume")
-	createTopic(t, topic, 1)
+	topic := newTopicName(t, "commands")
+	createTopic(t, topic, 3)
 
-	topicDLQ := newTopicName(t, "basic-consume-dlq")
+	topicDLQ := newTopicName(t, "commands-dlq")
 	createTopic(t, topicDLQ, 1)
 
-	ids := []int{1, 2, 3, 4, 5}
-	prod := newProducer(t)
-	for _, id := range ids {
-		produceCommand(t, prod, topic, id)
+	ids := map[int32][]int{
+		0: {1, 2},
+		1: {3},
+		2: {4},
 	}
+	prod := newProducer(t)
+	produceCommands(t, prod, topic, ids)
 
 	var wg sync.WaitGroup
 
-	stubConsumer := newTransientFailureRecordConsumer(&wg, 0, len(ids))
-	client := newKgoConsumerClient(t, "basic-consume", []string{topic})
+	stubConsumer := newTransientFailureRecordConsumer(&wg, 0, lenValues(ids))
+	client := newKgoConsumerClient(t, "commands", []string{topic})
 
 	cons, err := kgoconsumer.NewConsumer(client, topicDLQ, stubConsumer.consumeRecord)
 	if err != nil {
@@ -58,8 +60,12 @@ func TestBasicConsume(t *testing.T) {
 		t.Fatalf("consumer polling: %v", err)
 	}
 
-	if !slices.Equal(stubConsumer.processedIDs, ids) {
-		t.Fatalf("got: %v want: %v", stubConsumer.processedIDs, ids)
+	if !reflect.DeepEqual(stubConsumer.processedIDsByPartition, ids) {
+		t.Fatalf(
+			"processed IDs mismatch: got %v, want %v",
+			stubConsumer.processedIDsByPartition,
+			ids,
+		)
 	}
 }
 
@@ -74,17 +80,20 @@ func newKgoConsumerClient(tb testing.TB, consumerGroup string, topics []string) 
 }
 
 type transientFailureRecordConsumer struct {
-	wg           *sync.WaitGroup
-	failTimes    int
-	failedIDs    []int
-	processedIDs []int
+	wg                      *sync.WaitGroup
+	failTimes               int
+	failedTimes             int
+	failedIDsByPartition    map[int32][]int
+	processedIDsByPartition map[int32][]int
 }
 
 func newTransientFailureRecordConsumer(wg *sync.WaitGroup, failTimes, toProcess int) transientFailureRecordConsumer {
 	wg.Add(failTimes + toProcess)
 	return transientFailureRecordConsumer{
-		wg:        wg,
-		failTimes: failTimes,
+		wg:                      wg,
+		failTimes:               failTimes,
+		failedIDsByPartition:    make(map[int32][]int),
+		processedIDsByPartition: make(map[int32][]int),
 	}
 }
 
@@ -95,20 +104,31 @@ func (c *transientFailureRecordConsumer) consumeRecord(_ context.Context, record
 
 	cmd := newCommand(record)
 
-	if c.failTimes > len(c.failedIDs) {
-		c.failedIDs = append(c.failedIDs, cmd.id)
+	if c.failTimes > c.failedTimes {
+		ids := c.failedIDsByPartition[record.Partition]
+		c.failedIDsByPartition[record.Partition] = append(ids, cmd.id)
+
+		c.failedTimes++
+
 		return errors.Join(errors.New("synthetic failure"), kgoconsumer.ErrTransient)
 	}
 
-	c.processedIDs = append(c.processedIDs, cmd.id)
+	ids := c.processedIDsByPartition[record.Partition]
+	c.processedIDsByPartition[record.Partition] = append(ids, cmd.id)
 	return nil
 }
 
-func produceCommand(tb testing.TB, producer producer, topic string, id int) {
-	cmd := command{
-		id: id,
+func produceCommands(tb testing.TB, producer producer, topic string, idByPartition map[int32][]int) {
+	records := make([]*kgo.Record, 0)
+	for partition, ids := range idByPartition {
+		for _, id := range ids {
+			cmd := command{
+				id: id,
+			}
+			records = append(records, cmd.toRecord(topic, partition))
+		}
 	}
-	producer.produce(tb, cmd.toRecord(topic))
+	producer.produce(tb, records...)
 }
 
 type command struct {
@@ -123,12 +143,13 @@ func newCommand(record *kgo.Record) command {
 	}
 }
 
-func (c command) toRecord(topic string) *kgo.Record {
+func (c command) toRecord(topic string, partition int32) *kgo.Record {
 	encodedID := intToByte(c.id)
 	return &kgo.Record{
-		Key:   encodedID[:],
-		Value: encodedID[:],
-		Topic: topic,
+		Key:       encodedID[:],
+		Value:     encodedID[:],
+		Topic:     topic,
+		Partition: partition,
 	}
 }
 
@@ -140,4 +161,12 @@ func intToByte(n int) [8]byte {
 	var encoded [8]byte
 	binary.BigEndian.PutUint64(encoded[:], uint64(n))
 	return encoded
+}
+
+func lenValues[K comparable, V any](data map[K][]V) int {
+	size := 0
+	for _, v := range data {
+		size += len(v)
+	}
+	return size
 }

@@ -73,11 +73,11 @@ func createTopic(tb testing.TB, topic string, partitions int) {
 }
 
 func newTopicName(tb testing.TB, topic string) string {
-	return tb.Name() + topic
+	return tb.Name() + "-" + topic
 }
 
 func newConsumerGroupName(tb testing.TB, consumerGroup string) string {
-	consumerGroup = tb.Name() + consumerGroup
+	consumerGroup = tb.Name() + "-" + consumerGroup
 
 	tb.Cleanup(func() {
 		resp, err := adminClient.DeleteGroup(context.Background(), consumerGroup)
@@ -99,6 +99,7 @@ type producer struct {
 func newProducer(tb testing.TB) producer {
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(testKafkaBrokers...),
+		kgo.RecordPartitioner(kgo.ManualPartitioner()),
 	}
 
 	client, err := kgo.NewClient(opts...)
@@ -110,10 +111,10 @@ func newProducer(tb testing.TB) producer {
 	return producer{client: client}
 }
 
-func (p producer) produce(tb testing.TB, record *kgo.Record) {
-	result := p.client.ProduceSync(tb.Context(), record)
+func (p producer) produce(tb testing.TB, records ...*kgo.Record) {
+	result := p.client.ProduceSync(tb.Context(), records...)
 	if err := result.FirstErr(); err != nil {
-		tb.Fatalf("producing test record %v: %v", record, err)
+		tb.Fatalf("producing test record %v: %v", records, err)
 	}
 }
 
