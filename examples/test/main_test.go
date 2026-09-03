@@ -144,6 +144,14 @@ func newConsumer(tb testing.TB, topics []string, consumerGroup string) consumer 
 	return consumer{client: client}
 }
 
+func (c consumer) consumeRecords(tb testing.TB) []*kgo.Record {
+	fetches := c.client.PollFetches(tb.Context())
+	if err := fetches.Err(); err != nil {
+		tb.Fatalf("consuming records: %v", err)
+	}
+	return fetches.Records()
+}
+
 func (c consumer) joinConsumerGroup(tb testing.TB) {
 	fetches := c.client.PollRecords(tb.Context(), 1)
 	if err := fetches.Err(); err != nil {

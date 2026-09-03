@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -17,21 +18,28 @@ import (
 // TODO: test case when before cancel context is created, rebalance triggers and processing should be cancelled
 func TestConsumption(t *testing.T) {
 	tests := []struct {
-		name                         string
-		ids                          map[int32][]int
-		shouldFail                   map[int]int
-		expectedFailedIDsByPartition map[int32][]int
-		topicDLQPartitions           int
+		name                                    string
+		ids                                     map[int32][]int
+		shouldFailTransientlyTimes              map[int]int
+		shouldFailPermanently                   map[int]struct{}
+		expectedProcessedIDsByPartition         map[int32][]int
+		expectedFailedIDsByPartition            map[int32][]int
+		expectedFailedPermanentlyIDsByPartition map[int32][]int
 	}{
 		{
-			name: "basic",
+			name: "no failures",
 			ids: map[int32][]int{
 				0: {1, 2},
 				1: {3},
 				2: {4},
 			},
-			expectedFailedIDsByPartition: make(map[int32][]int),
-			topicDLQPartitions:           1,
+			expectedProcessedIDsByPartition: map[int32][]int{
+				0: {1, 2},
+				1: {3},
+				2: {4},
+			},
+			expectedFailedIDsByPartition:            make(map[int32][]int),
+			expectedFailedPermanentlyIDsByPartition: make(map[int32][]int),
 		},
 		{
 			name: "transient failures",
@@ -40,15 +48,69 @@ func TestConsumption(t *testing.T) {
 				1: {3},
 				2: {4},
 			},
-			shouldFail: map[int]int{
+			shouldFailTransientlyTimes: map[int]int{
 				2: 3,
 				4: 2,
+			},
+			expectedProcessedIDsByPartition: map[int32][]int{
+				0: {1, 2},
+				1: {3},
+				2: {4},
 			},
 			expectedFailedIDsByPartition: map[int32][]int{
 				0: {2, 2, 2},
 				2: {4, 4},
 			},
-			topicDLQPartitions: 1,
+			expectedFailedPermanentlyIDsByPartition: make(map[int32][]int),
+		},
+		{
+			name: "permanent failures",
+			ids: map[int32][]int{
+				0: {1, 2},
+				1: {3},
+				2: {4},
+			},
+			shouldFailPermanently: map[int]struct{}{
+				1: {},
+				2: {},
+				3: {},
+				4: {},
+			},
+			expectedProcessedIDsByPartition: make(map[int32][]int),
+			expectedFailedIDsByPartition:    make(map[int32][]int),
+			expectedFailedPermanentlyIDsByPartition: map[int32][]int{
+				0: {1, 2},
+				1: {3},
+				2: {4},
+			},
+		},
+		{
+			name: "mixed failures",
+			ids: map[int32][]int{
+				0: {1, 2},
+				1: {3},
+				2: {4},
+			},
+			shouldFailTransientlyTimes: map[int]int{
+				2: 3,
+				4: 2,
+			},
+			shouldFailPermanently: map[int]struct{}{
+				2: {},
+				4: {},
+			},
+			expectedProcessedIDsByPartition: map[int32][]int{
+				0: {1},
+				1: {3},
+			},
+			expectedFailedIDsByPartition: map[int32][]int{
+				0: {2, 2, 2},
+				2: {4, 4},
+			},
+			expectedFailedPermanentlyIDsByPartition: map[int32][]int{
+				0: {2},
+				2: {4},
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -57,29 +119,26 @@ func TestConsumption(t *testing.T) {
 			createTopic(t, topic, len(tt.ids))
 
 			topicDLQ := newTopicName(t, "commands-dlq")
-			createTopic(t, topicDLQ, tt.topicDLQPartitions)
+			createTopic(t, topicDLQ, 1)
 
 			prod := newProducer(t)
 			produceCommands(t, prod, topic, tt.ids)
 
 			var wg sync.WaitGroup
 
-			stubConsumer := newTransientFailureRecordConsumer(&wg, tt.shouldFail, tt.ids)
+			stub := newStubConsumer(&wg, tt.shouldFailTransientlyTimes, tt.shouldFailPermanently, tt.ids)
 			client := newKgoConsumerClient(t, "commands", []string{topic})
 
-			cons, err := kgoconsumer.NewConsumer(client, topicDLQ, stubConsumer.consumeRecord, kgoconsumer.WithBackoffMax(100*time.Microsecond))
+			cons, err := kgoconsumer.NewConsumer(client, topicDLQ, stub.consumeRecord, kgoconsumer.WithBackoffMax(100*time.Microsecond))
 			if err != nil {
 				t.Fatalf("creating new kgoconsumer consumer: %v", err)
 			}
+			t.Cleanup(cons.Close)
 
 			consumerErrCh := make(chan error)
 			consumerCtx, cancelConsuming := context.WithCancel(t.Context())
 
 			go func() {
-				defer func() {
-					cons.Close()
-				}()
-
 				if err := cons.StartPolling(consumerCtx); err != nil {
 					consumerErrCh <- fmt.Errorf("polling: %w", err)
 					return
@@ -88,24 +147,50 @@ func TestConsumption(t *testing.T) {
 			}()
 
 			wg.Wait()
+
+			if len(tt.expectedFailedPermanentlyIDsByPartition) > 0 {
+				dlqCommands := consumeDLQTopic(t, topicDLQ)
+				expectedDLQCommands := newDLQCommands(tt.expectedFailedPermanentlyIDsByPartition)
+
+				sortDLQCommands(dlqCommands)
+				sortDLQCommands(expectedDLQCommands)
+
+				if !slices.Equal(dlqCommands, expectedDLQCommands) {
+					t.Fatalf(
+						"dlq commands mismatch: got %v, want %v",
+						dlqCommands,
+						expectedDLQCommands,
+					)
+				}
+			}
+
 			cancelConsuming()
+
 			if err := <-consumerErrCh; err != nil && !errors.Is(err, context.Canceled) {
 				t.Fatalf("consumer polling: %v", err)
 			}
 
-			if !reflect.DeepEqual(stubConsumer.processedIDsByPartition, tt.ids) {
+			if !reflect.DeepEqual(stub.processedIDsByPartition, tt.expectedProcessedIDsByPartition) {
 				t.Fatalf(
 					"processed IDs mismatch: got %v, want %v",
-					stubConsumer.processedIDsByPartition,
+					stub.processedIDsByPartition,
 					tt.ids,
 				)
 			}
 
-			if !reflect.DeepEqual(stubConsumer.failedIDsByPartition, tt.expectedFailedIDsByPartition) {
+			if !reflect.DeepEqual(stub.failedIDsByPartition, tt.expectedFailedIDsByPartition) {
 				t.Fatalf(
-					"failed IDs mismatch: got %v, want %v",
-					stubConsumer.failedIDsByPartition,
+					"failed transiently IDs mismatch: got %v, want %v",
+					stub.failedIDsByPartition,
 					tt.expectedFailedIDsByPartition,
+				)
+			}
+
+			if !reflect.DeepEqual(stub.failedPermanentlyIDsByPartition, tt.expectedFailedPermanentlyIDsByPartition) {
+				t.Fatalf(
+					"failed permanently IDs mismatch: got %v, want %v",
+					stub.failedPermanentlyIDsByPartition,
+					tt.expectedFailedPermanentlyIDsByPartition,
 				)
 			}
 		})
@@ -122,28 +207,33 @@ func newKgoConsumerClient(tb testing.TB, consumerGroup string, topics []string) 
 	return client
 }
 
-type transientFailureRecordConsumer struct {
-	wg                      *sync.WaitGroup
-	shouldFail              map[int]int
-	failedIDsByPartition    map[int32][]int
-	processedIDsByPartition map[int32][]int
+type stubConsumer struct {
+	wg                              *sync.WaitGroup
+	shouldFailTransientlyTimes      map[int]int
+	shouldFailPermanently           map[int]struct{}
+	failedIDsByPartition            map[int32][]int
+	failedPermanentlyIDsByPartition map[int32][]int
+	processedIDsByPartition         map[int32][]int
 }
 
-func newTransientFailureRecordConsumer(
+func newStubConsumer(
 	wg *sync.WaitGroup,
-	shouldFail map[int]int,
+	shouldFailTransientlyTimes map[int]int,
+	shouldFailPermanently map[int]struct{},
 	toProcess map[int32][]int,
-) transientFailureRecordConsumer {
-	failTimes := calculateFailTimes(shouldFail)
+) stubConsumer {
+	failTimes := calculateFailTimes(shouldFailTransientlyTimes)
 	toProcessAmount := lenValues(toProcess)
 
 	wg.Add(failTimes + toProcessAmount)
 
-	return transientFailureRecordConsumer{
-		wg:                      wg,
-		shouldFail:              shouldFail,
-		failedIDsByPartition:    make(map[int32][]int),
-		processedIDsByPartition: make(map[int32][]int),
+	return stubConsumer{
+		wg:                              wg,
+		shouldFailTransientlyTimes:      shouldFailTransientlyTimes,
+		shouldFailPermanently:           shouldFailPermanently,
+		failedIDsByPartition:            make(map[int32][]int),
+		failedPermanentlyIDsByPartition: make(map[int32][]int),
+		processedIDsByPartition:         make(map[int32][]int),
 	}
 }
 
@@ -155,26 +245,37 @@ func calculateFailTimes(shouldFail map[int]int) int {
 	return failTimes
 }
 
-func (c *transientFailureRecordConsumer) consumeRecord(_ context.Context, record *kgo.Record) error {
+func (c *stubConsumer) consumeRecord(_ context.Context, record *kgo.Record) error {
 	defer func() {
 		c.wg.Done()
 	}()
 
 	cmd := newCommand(record)
 
-	if failTimes, ok := c.shouldFail[cmd.id]; ok && failTimes > 0 {
+	if failTimes, ok := c.shouldFailTransientlyTimes[cmd.id]; ok && failTimes > 0 {
 		ids := c.failedIDsByPartition[record.Partition]
 		c.failedIDsByPartition[record.Partition] = append(ids, cmd.id)
 
-		c.shouldFail[cmd.id] = failTimes - 1
+		c.shouldFailTransientlyTimes[cmd.id] = failTimes - 1
 
-		return errors.Join(errors.New("synthetic failure"), kgoconsumer.ErrTransient)
+		return errors.Join(errTransient, kgoconsumer.ErrTransient)
+	}
+
+	if _, ok := c.shouldFailPermanently[cmd.id]; ok {
+		ids := c.failedPermanentlyIDsByPartition[record.Partition]
+		c.failedPermanentlyIDsByPartition[record.Partition] = append(ids, cmd.id)
+		return errPermanent
 	}
 
 	ids := c.processedIDsByPartition[record.Partition]
 	c.processedIDsByPartition[record.Partition] = append(ids, cmd.id)
 	return nil
 }
+
+var (
+	errTransient = errors.New("transient failure")
+	errPermanent = errors.New("permanent failure")
+)
 
 func produceCommands(tb testing.TB, producer producer, topic string, idByPartition map[int32][]int) {
 	records := make([]*kgo.Record, 0)
@@ -187,6 +288,60 @@ func produceCommands(tb testing.TB, producer producer, topic string, idByPartiti
 		}
 	}
 	producer.produce(tb, records...)
+}
+
+func consumeDLQTopic(tb testing.TB, dlqTopic string) []dlqCommand {
+	cons := newConsumer(tb, []string{dlqTopic}, newConsumerGroupName(tb, "dlq-test-consumer"))
+
+	records := cons.consumeRecords(tb)
+
+	commands := make([]dlqCommand, len(records))
+	for i, r := range records {
+		commands[i] = dlqCommand{
+			cmd:   newCommand(r),
+			cause: dlqReason(tb, r),
+		}
+	}
+
+	return commands
+}
+
+func dlqReason(tb testing.TB, record *kgo.Record) string {
+	for _, h := range record.Headers {
+		if h.Key == "dlq-reason" {
+			return string(h.Value)
+		}
+	}
+	tb.Fatalf("dlq-reason not encoded in the header of record %v", record)
+	return ""
+}
+
+type dlqCommand struct {
+	cmd   command
+	cause string
+}
+
+func newDLQCommands(expectedFailedPermanentlyIDsByPartition map[int32][]int) []dlqCommand {
+	var commands []dlqCommand
+	for _, ids := range expectedFailedPermanentlyIDsByPartition {
+		for _, id := range ids {
+			commands = append(commands, newDLQCommand(id))
+		}
+	}
+	return commands
+}
+
+func newDLQCommand(id int) dlqCommand {
+	return dlqCommand{
+		cmd:   command{id: id},
+		cause: errPermanent.Error(),
+	}
+}
+
+func sortDLQCommands(cmds []dlqCommand) {
+	slices.SortFunc(cmds, func(a, b dlqCommand) int {
+		return a.cmd.id - b.cmd.id
+	})
 }
 
 type command struct {
