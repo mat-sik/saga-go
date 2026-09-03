@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/testcontainers/testcontainers-go/modules/kafka"
@@ -73,11 +74,11 @@ func createTopic(tb testing.TB, topic string, partitions int) {
 }
 
 func newTopicName(tb testing.TB, topic string) string {
-	return tb.Name() + "-" + topic
+	return sanitizeKafkaName(tb.Name() + "-" + topic)
 }
 
 func newConsumerGroupName(tb testing.TB, consumerGroup string) string {
-	consumerGroup = tb.Name() + "-" + consumerGroup
+	consumerGroup = sanitizeKafkaName(tb.Name() + "-" + consumerGroup)
 
 	tb.Cleanup(func() {
 		resp, err := adminClient.DeleteGroup(context.Background(), consumerGroup)
@@ -90,6 +91,10 @@ func newConsumerGroupName(tb testing.TB, consumerGroup string) string {
 	})
 
 	return consumerGroup
+}
+
+func sanitizeKafkaName(name string) string {
+	return strings.ReplaceAll(name, "/", "_")
 }
 
 type producer struct {

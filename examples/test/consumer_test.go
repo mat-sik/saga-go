@@ -8,64 +8,107 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 // TODO: test case when before cancel context is created, rebalance triggers and processing should be cancelled
-func TestBasicConsume(t *testing.T) {
-	topic := newTopicName(t, "commands")
-	createTopic(t, topic, 3)
-
-	topicDLQ := newTopicName(t, "commands-dlq")
-	createTopic(t, topicDLQ, 1)
-
-	ids := map[int32][]int{
-		0: {1, 2},
-		1: {3},
-		2: {4},
+func TestConsumption(t *testing.T) {
+	tests := []struct {
+		name                         string
+		ids                          map[int32][]int
+		shouldFail                   map[int]int
+		expectedFailedIDsByPartition map[int32][]int
+		topicDLQPartitions           int
+	}{
+		{
+			name: "basic",
+			ids: map[int32][]int{
+				0: {1, 2},
+				1: {3},
+				2: {4},
+			},
+			expectedFailedIDsByPartition: make(map[int32][]int),
+			topicDLQPartitions:           1,
+		},
+		{
+			name: "transient failures",
+			ids: map[int32][]int{
+				0: {1, 2},
+				1: {3},
+				2: {4},
+			},
+			shouldFail: map[int]int{
+				2: 3,
+				4: 2,
+			},
+			expectedFailedIDsByPartition: map[int32][]int{
+				0: {2, 2, 2},
+				2: {4, 4},
+			},
+			topicDLQPartitions: 1,
+		},
 	}
-	prod := newProducer(t)
-	produceCommands(t, prod, topic, ids)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			topic := newTopicName(t, "commands")
+			createTopic(t, topic, len(tt.ids))
 
-	var wg sync.WaitGroup
+			topicDLQ := newTopicName(t, "commands-dlq")
+			createTopic(t, topicDLQ, tt.topicDLQPartitions)
 
-	stubConsumer := newTransientFailureRecordConsumer(&wg, nil, ids)
-	client := newKgoConsumerClient(t, "commands", []string{topic})
+			prod := newProducer(t)
+			produceCommands(t, prod, topic, tt.ids)
 
-	cons, err := kgoconsumer.NewConsumer(client, topicDLQ, stubConsumer.consumeRecord)
-	if err != nil {
-		t.Fatalf("creating new kgoconsumer consumer: %v", err)
-	}
+			var wg sync.WaitGroup
 
-	consumerErrCh := make(chan error)
-	consumerCtx, cancelConsuming := context.WithCancel(t.Context())
+			stubConsumer := newTransientFailureRecordConsumer(&wg, tt.shouldFail, tt.ids)
+			client := newKgoConsumerClient(t, "commands", []string{topic})
 
-	go func() {
-		defer func() {
-			cons.Close()
-		}()
+			cons, err := kgoconsumer.NewConsumer(client, topicDLQ, stubConsumer.consumeRecord, kgoconsumer.WithBackoffMax(100*time.Microsecond))
+			if err != nil {
+				t.Fatalf("creating new kgoconsumer consumer: %v", err)
+			}
 
-		if err := cons.StartPolling(consumerCtx); err != nil {
-			consumerErrCh <- fmt.Errorf("polling: %w", err)
-			return
-		}
-		consumerErrCh <- nil
-	}()
+			consumerErrCh := make(chan error)
+			consumerCtx, cancelConsuming := context.WithCancel(t.Context())
 
-	wg.Wait()
-	cancelConsuming()
-	if err := <-consumerErrCh; err != nil && !errors.Is(err, context.Canceled) {
-		t.Fatalf("consumer polling: %v", err)
-	}
+			go func() {
+				defer func() {
+					cons.Close()
+				}()
 
-	if !reflect.DeepEqual(stubConsumer.processedIDsByPartition, ids) {
-		t.Fatalf(
-			"processed IDs mismatch: got %v, want %v",
-			stubConsumer.processedIDsByPartition,
-			ids,
-		)
+				if err := cons.StartPolling(consumerCtx); err != nil {
+					consumerErrCh <- fmt.Errorf("polling: %w", err)
+					return
+				}
+				consumerErrCh <- nil
+			}()
+
+			wg.Wait()
+			cancelConsuming()
+			if err := <-consumerErrCh; err != nil && !errors.Is(err, context.Canceled) {
+				t.Fatalf("consumer polling: %v", err)
+			}
+
+			if !reflect.DeepEqual(stubConsumer.processedIDsByPartition, tt.ids) {
+				t.Fatalf(
+					"processed IDs mismatch: got %v, want %v",
+					stubConsumer.processedIDsByPartition,
+					tt.ids,
+				)
+			}
+
+			if !reflect.DeepEqual(stubConsumer.failedIDsByPartition, tt.expectedFailedIDsByPartition) {
+				t.Fatalf(
+					"failed IDs mismatch: got %v, want %v",
+					stubConsumer.failedIDsByPartition,
+					tt.expectedFailedIDsByPartition,
+				)
+			}
+		})
 	}
 }
 
@@ -81,14 +124,14 @@ func newKgoConsumerClient(tb testing.TB, consumerGroup string, topics []string) 
 
 type transientFailureRecordConsumer struct {
 	wg                      *sync.WaitGroup
-	shouldFail              map[int32]map[int]int
+	shouldFail              map[int]int
 	failedIDsByPartition    map[int32][]int
 	processedIDsByPartition map[int32][]int
 }
 
 func newTransientFailureRecordConsumer(
 	wg *sync.WaitGroup,
-	shouldFail map[int32]map[int]int,
+	shouldFail map[int]int,
 	toProcess map[int32][]int,
 ) transientFailureRecordConsumer {
 	failTimes := calculateFailTimes(shouldFail)
@@ -104,12 +147,10 @@ func newTransientFailureRecordConsumer(
 	}
 }
 
-func calculateFailTimes(shouldFail map[int32]map[int]int) int {
+func calculateFailTimes(shouldFail map[int]int) int {
 	failTimes := 0
-	for _, ids := range shouldFail {
-		for _, count := range ids {
-			failTimes += count
-		}
+	for _, count := range shouldFail {
+		failTimes += count
 	}
 	return failTimes
 }
@@ -121,11 +162,11 @@ func (c *transientFailureRecordConsumer) consumeRecord(_ context.Context, record
 
 	cmd := newCommand(record)
 
-	if failTimes, ok := c.shouldFail[record.Partition][cmd.id]; ok && failTimes > 0 {
+	if failTimes, ok := c.shouldFail[cmd.id]; ok && failTimes > 0 {
 		ids := c.failedIDsByPartition[record.Partition]
 		c.failedIDsByPartition[record.Partition] = append(ids, cmd.id)
 
-		c.shouldFail[record.Partition][cmd.id] = failTimes - 1
+		c.shouldFail[cmd.id] = failTimes - 1
 
 		return errors.Join(errors.New("synthetic failure"), kgoconsumer.ErrTransient)
 	}
