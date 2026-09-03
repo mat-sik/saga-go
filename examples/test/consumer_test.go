@@ -31,7 +31,7 @@ func TestBasicConsume(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	stubConsumer := newTransientFailureRecordConsumer(&wg, 0, lenValues(ids))
+	stubConsumer := newTransientFailureRecordConsumer(&wg, nil, ids)
 	client := newKgoConsumerClient(t, "commands", []string{topic})
 
 	cons, err := kgoconsumer.NewConsumer(client, topicDLQ, stubConsumer.consumeRecord)
@@ -81,20 +81,37 @@ func newKgoConsumerClient(tb testing.TB, consumerGroup string, topics []string) 
 
 type transientFailureRecordConsumer struct {
 	wg                      *sync.WaitGroup
-	failTimes               int
-	failedTimes             int
+	shouldFail              map[int32]map[int]int
 	failedIDsByPartition    map[int32][]int
 	processedIDsByPartition map[int32][]int
 }
 
-func newTransientFailureRecordConsumer(wg *sync.WaitGroup, failTimes, toProcess int) transientFailureRecordConsumer {
-	wg.Add(failTimes + toProcess)
+func newTransientFailureRecordConsumer(
+	wg *sync.WaitGroup,
+	shouldFail map[int32]map[int]int,
+	toProcess map[int32][]int,
+) transientFailureRecordConsumer {
+	failTimes := calculateFailTimes(shouldFail)
+	toProcessAmount := lenValues(toProcess)
+
+	wg.Add(failTimes + toProcessAmount)
+
 	return transientFailureRecordConsumer{
 		wg:                      wg,
-		failTimes:               failTimes,
+		shouldFail:              shouldFail,
 		failedIDsByPartition:    make(map[int32][]int),
 		processedIDsByPartition: make(map[int32][]int),
 	}
+}
+
+func calculateFailTimes(shouldFail map[int32]map[int]int) int {
+	failTimes := 0
+	for _, ids := range shouldFail {
+		for _, count := range ids {
+			failTimes += count
+		}
+	}
+	return failTimes
 }
 
 func (c *transientFailureRecordConsumer) consumeRecord(_ context.Context, record *kgo.Record) error {
@@ -104,11 +121,11 @@ func (c *transientFailureRecordConsumer) consumeRecord(_ context.Context, record
 
 	cmd := newCommand(record)
 
-	if c.failTimes > c.failedTimes {
+	if failTimes, ok := c.shouldFail[record.Partition][cmd.id]; ok && failTimes > 0 {
 		ids := c.failedIDsByPartition[record.Partition]
 		c.failedIDsByPartition[record.Partition] = append(ids, cmd.id)
 
-		c.failedTimes++
+		c.shouldFail[record.Partition][cmd.id] = failTimes - 1
 
 		return errors.Join(errors.New("synthetic failure"), kgoconsumer.ErrTransient)
 	}
