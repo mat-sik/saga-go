@@ -124,49 +124,31 @@ func TestConsumption(t *testing.T) {
 			prod := newProducer(t)
 			produceCommands(t, prod, topic, tt.ids)
 
-			var wg sync.WaitGroup
+			var wgStub sync.WaitGroup
 
-			stub := newStubConsumer(&wg, tt.shouldFailTransientlyTimes, tt.shouldFailPermanently, tt.ids)
-			client := newKgoConsumerClient(t, "commands", []string{topic})
+			stub := newStubConsumer(&wgStub, tt.shouldFailTransientlyTimes, tt.shouldFailPermanently, tt.ids)
+			testedConsumer := newTestedConsumer(t, topic, topicDLQ, stub)
 
-			cons, err := kgoconsumer.NewConsumer(client, topicDLQ, stub.consumeRecord, kgoconsumer.WithBackoffMax(100*time.Microsecond))
-			if err != nil {
-				t.Fatalf("creating new kgoconsumer consumer: %v", err)
-			}
-			t.Cleanup(cons.Close)
-
-			consumerErrCh := make(chan error)
-			consumerCtx, cancelConsuming := context.WithCancel(t.Context())
+			consumerDoneCh := make(chan error)
+			consumerCtx, cancelConsumer := context.WithCancel(t.Context())
 
 			go func() {
-				if err := cons.StartPolling(consumerCtx); err != nil {
-					consumerErrCh <- fmt.Errorf("polling: %w", err)
+				if err := testedConsumer.StartPolling(consumerCtx); err != nil {
+					consumerDoneCh <- fmt.Errorf("polling: %w", err)
 					return
 				}
-				consumerErrCh <- nil
+				consumerDoneCh <- nil
 			}()
 
-			wg.Wait()
+			wgStub.Wait()
 
 			if len(tt.expectedFailedPermanentlyIDsByPartition) > 0 {
-				dlqCommands := consumeDLQTopic(t, topicDLQ)
-				expectedDLQCommands := newDLQCommands(tt.expectedFailedPermanentlyIDsByPartition)
-
-				sortDLQCommands(dlqCommands)
-				sortDLQCommands(expectedDLQCommands)
-
-				if !slices.Equal(dlqCommands, expectedDLQCommands) {
-					t.Fatalf(
-						"dlq commands mismatch: got %v, want %v",
-						dlqCommands,
-						expectedDLQCommands,
-					)
-				}
+				assertDLQCommandsEqual(t, topicDLQ, tt.expectedFailedPermanentlyIDsByPartition)
 			}
 
-			cancelConsuming()
+			cancelConsumer()
 
-			if err := <-consumerErrCh; err != nil && !errors.Is(err, context.Canceled) {
+			if err := <-consumerDoneCh; err != nil && !errors.Is(err, context.Canceled) {
 				t.Fatalf("consumer polling: %v", err)
 			}
 
@@ -195,6 +177,36 @@ func TestConsumption(t *testing.T) {
 			}
 		})
 	}
+}
+
+func assertDLQCommandsEqual(tb testing.TB, topicDLQ string, expectedFailedPermanentlyIDsByPartition map[int32][]int) {
+	tb.Helper()
+
+	dlqCommands := consumeDLQTopic(tb, topicDLQ)
+	expectedDLQCommands := newDLQCommands(expectedFailedPermanentlyIDsByPartition)
+
+	sortDLQCommands(dlqCommands)
+	sortDLQCommands(expectedDLQCommands)
+
+	if !slices.Equal(dlqCommands, expectedDLQCommands) {
+		tb.Fatalf(
+			"dlq commands mismatch: got %v, want %v",
+			dlqCommands,
+			expectedDLQCommands,
+		)
+	}
+}
+
+func newTestedConsumer(t *testing.T, topic string, topicDLQ string, stub stubConsumer) kgoconsumer.Consumer {
+	client := newKgoConsumerClient(t, "commands", []string{topic})
+
+	cons, err := kgoconsumer.NewConsumer(client, topicDLQ, stub.consumeRecord, kgoconsumer.WithBackoffMax(100*time.Microsecond))
+	if err != nil {
+		t.Fatalf("creating new kgoconsumer consumer: %v", err)
+	}
+	t.Cleanup(cons.Close)
+
+	return cons
 }
 
 func newKgoConsumerClient(tb testing.TB, consumerGroup string, topics []string) kgoconsumer.Client {
@@ -338,8 +350,8 @@ func newDLQCommand(id int) dlqCommand {
 	}
 }
 
-func sortDLQCommands(cmds []dlqCommand) {
-	slices.SortFunc(cmds, func(a, b dlqCommand) int {
+func sortDLQCommands(commands []dlqCommand) {
+	slices.SortFunc(commands, func(a, b dlqCommand) int {
 		return a.cmd.id - b.cmd.id
 	})
 }
