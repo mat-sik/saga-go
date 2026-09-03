@@ -19,7 +19,7 @@ func (c Client) ToKgo() *kgo.Client {
 	return c.kgoClient
 }
 
-func NewClient(seeds []string, consumerGroup string, topics []string) (Client, error) {
+func NewClient(seeds []string, consumerGroup string, topics []string, extra ...kgo.Opt) (Client, error) {
 	cancelProcessing := newCancelProcessingStore()
 
 	opts := []kgo.Opt{
@@ -32,6 +32,8 @@ func NewClient(seeds []string, consumerGroup string, topics []string) (Client, e
 			cancelProcessing.cancel()
 		}),
 	}
+
+	opts = append(opts, extra...)
 
 	client, err := kgo.NewClient(opts...)
 	if err != nil {

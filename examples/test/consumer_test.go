@@ -212,7 +212,13 @@ func newTestedConsumer(t *testing.T, topic string, topicDLQ string, stub stubCon
 func newKgoConsumerClient(tb testing.TB, consumerGroup string, topics []string) kgoconsumer.Client {
 	consumerGroup = newConsumerGroupName(tb, consumerGroup)
 
-	client, err := kgoconsumer.NewClient(testKafkaBrokers, consumerGroup, topics)
+	client, err := kgoconsumer.NewClient(
+		testKafkaBrokers,
+		consumerGroup,
+		topics,
+		kgo.FetchMaxBytes(1),
+		kgo.FetchMaxPartitionBytes(1),
+	)
 	if err != nil {
 		tb.Fatalf("creating new kgoconsumer client: %v", err)
 	}
