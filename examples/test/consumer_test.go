@@ -179,22 +179,17 @@ func TestConsumption(t *testing.T) {
 	}
 }
 
-func assertDLQCommandsEqual(tb testing.TB, topicDLQ string, expectedFailedPermanentlyIDsByPartition map[int32][]int) {
-	tb.Helper()
-
-	dlqCommands := consumeDLQTopic(tb, topicDLQ)
-	expectedDLQCommands := newDLQCommands(expectedFailedPermanentlyIDsByPartition)
-
-	sortDLQCommands(dlqCommands)
-	sortDLQCommands(expectedDLQCommands)
-
-	if !slices.Equal(dlqCommands, expectedDLQCommands) {
-		tb.Fatalf(
-			"dlq commands mismatch: got %v, want %v",
-			dlqCommands,
-			expectedDLQCommands,
-		)
+func produceCommands(tb testing.TB, producer producer, topic string, idByPartition map[int32][]int) {
+	records := make([]*kgo.Record, 0)
+	for partition, ids := range idByPartition {
+		for _, id := range ids {
+			cmd := command{
+				id: id,
+			}
+			records = append(records, cmd.toRecord(topic, partition))
+		}
 	}
+	producer.produce(tb, records...)
 }
 
 func newTestedConsumer(t *testing.T, topic string, topicDLQ string, stub stubConsumer) kgoconsumer.Consumer {
@@ -223,6 +218,78 @@ func newKgoConsumerClient(tb testing.TB, consumerGroup string, topics []string) 
 		tb.Fatalf("creating new kgoconsumer client: %v", err)
 	}
 	return client
+}
+
+func assertDLQCommandsEqual(tb testing.TB, topicDLQ string, expectedFailedPermanentlyIDsByPartition map[int32][]int) {
+	tb.Helper()
+
+	dlqCommands := consumeDLQTopic(tb, topicDLQ)
+	expectedDLQCommands := newDLQCommands(expectedFailedPermanentlyIDsByPartition)
+
+	sortDLQCommands(dlqCommands)
+	sortDLQCommands(expectedDLQCommands)
+
+	if !slices.Equal(dlqCommands, expectedDLQCommands) {
+		tb.Fatalf(
+			"dlq commands mismatch: got %v, want %v",
+			dlqCommands,
+			expectedDLQCommands,
+		)
+	}
+}
+
+func consumeDLQTopic(tb testing.TB, dlqTopic string) []dlqCommand {
+	cons := newConsumer(tb, []string{dlqTopic}, newConsumerGroupName(tb, "dlq-test-consumer"))
+
+	records := cons.consumeRecords(tb)
+
+	commands := make([]dlqCommand, len(records))
+	for i, r := range records {
+		commands[i] = dlqCommand{
+			cmd:   newCommand(r),
+			cause: dlqReason(tb, r),
+		}
+	}
+
+	return commands
+}
+
+func dlqReason(tb testing.TB, record *kgo.Record) string {
+	for _, h := range record.Headers {
+		if h.Key == "dlq-reason" {
+			return string(h.Value)
+		}
+	}
+	tb.Fatalf("dlq-reason not encoded in the header of record %v", record)
+	return ""
+}
+
+type dlqCommand struct {
+	cmd   command
+	cause string
+}
+
+func newDLQCommands(expectedFailedPermanentlyIDsByPartition map[int32][]int) []dlqCommand {
+	var commands []dlqCommand
+	for _, ids := range expectedFailedPermanentlyIDsByPartition {
+		for _, id := range ids {
+			commands = append(commands, newDLQCommand(id))
+		}
+	}
+	return commands
+}
+
+func newDLQCommand(id int) dlqCommand {
+	return dlqCommand{
+		cmd:   command{id: id},
+		cause: errPermanent.Error(),
+	}
+}
+
+func sortDLQCommands(commands []dlqCommand) {
+	slices.SortFunc(commands, func(a, b dlqCommand) int {
+		return a.cmd.id - b.cmd.id
+	})
 }
 
 type stubConsumer struct {
@@ -294,73 +361,6 @@ var (
 	errTransient = errors.New("transient failure")
 	errPermanent = errors.New("permanent failure")
 )
-
-func produceCommands(tb testing.TB, producer producer, topic string, idByPartition map[int32][]int) {
-	records := make([]*kgo.Record, 0)
-	for partition, ids := range idByPartition {
-		for _, id := range ids {
-			cmd := command{
-				id: id,
-			}
-			records = append(records, cmd.toRecord(topic, partition))
-		}
-	}
-	producer.produce(tb, records...)
-}
-
-func consumeDLQTopic(tb testing.TB, dlqTopic string) []dlqCommand {
-	cons := newConsumer(tb, []string{dlqTopic}, newConsumerGroupName(tb, "dlq-test-consumer"))
-
-	records := cons.consumeRecords(tb)
-
-	commands := make([]dlqCommand, len(records))
-	for i, r := range records {
-		commands[i] = dlqCommand{
-			cmd:   newCommand(r),
-			cause: dlqReason(tb, r),
-		}
-	}
-
-	return commands
-}
-
-func dlqReason(tb testing.TB, record *kgo.Record) string {
-	for _, h := range record.Headers {
-		if h.Key == "dlq-reason" {
-			return string(h.Value)
-		}
-	}
-	tb.Fatalf("dlq-reason not encoded in the header of record %v", record)
-	return ""
-}
-
-type dlqCommand struct {
-	cmd   command
-	cause string
-}
-
-func newDLQCommands(expectedFailedPermanentlyIDsByPartition map[int32][]int) []dlqCommand {
-	var commands []dlqCommand
-	for _, ids := range expectedFailedPermanentlyIDsByPartition {
-		for _, id := range ids {
-			commands = append(commands, newDLQCommand(id))
-		}
-	}
-	return commands
-}
-
-func newDLQCommand(id int) dlqCommand {
-	return dlqCommand{
-		cmd:   command{id: id},
-		cause: errPermanent.Error(),
-	}
-}
-
-func sortDLQCommands(commands []dlqCommand) {
-	slices.SortFunc(commands, func(a, b dlqCommand) int {
-		return a.cmd.id - b.cmd.id
-	})
-}
 
 type command struct {
 	id int
