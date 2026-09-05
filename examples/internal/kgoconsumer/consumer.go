@@ -101,7 +101,9 @@ func (c Consumer) pollFetches(ctx context.Context) error {
 	defer c.cancelProcessing.cancel()
 
 	consumer := c.newBatchConsumer()
-	if err := consumer.consumeFetches(consumerCtx, fetches); err != nil {
+	if err := consumer.consumeFetches(consumerCtx, fetches); errors.Is(err, context.Canceled) {
+		slog.Warn("consumption cancelled most likely due to rebalance", "err", err)
+	} else if err != nil {
 		return err
 	}
 
