@@ -19,10 +19,11 @@ func (c Client) ToKgo() *kgo.Client {
 	return c.kgoClient
 }
 
-func NewClient(seeds []string, consumerGroup string, topics []string, extra ...kgo.Opt) (Client, error) {
+func NewClient(seeds []string, consumerGroup string, topics []string, opts ...ClientOption) (Client, error) {
+	cfg := newClientConfig(opts...)
 	cancelProcessing := newCancelProcessingStore()
 
-	opts := []kgo.Opt{
+	kgoOpts := []kgo.Opt{
 		kgo.SeedBrokers(seeds...),
 		kgo.ConsumerGroup(consumerGroup),
 		kgo.ConsumeTopics(topics...),
@@ -30,12 +31,12 @@ func NewClient(seeds []string, consumerGroup string, topics []string, extra ...k
 		kgo.BlockRebalanceOnPoll(),
 		kgo.OnPartitionsCallbackBlocked(func(ctx context.Context, client *kgo.Client) {
 			cancelProcessing.cancel()
+			cfg.onRebalanceBlocked()
 		}),
 	}
+	kgoOpts = append(kgoOpts, cfg.toKgoOpts()...)
 
-	opts = append(opts, extra...)
-
-	client, err := kgo.NewClient(opts...)
+	client, err := kgo.NewClient(kgoOpts...)
 	if err != nil {
 		return Client{}, fmt.Errorf("creating franz-go client: %w", err)
 	}

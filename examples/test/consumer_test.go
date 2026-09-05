@@ -211,8 +211,8 @@ func newKgoConsumerClient(tb testing.TB, consumerGroup string, topics []string) 
 		testKafkaBrokers,
 		consumerGroup,
 		topics,
-		kgo.FetchMaxBytes(1),
-		kgo.FetchMaxPartitionBytes(1),
+		kgoconsumer.WithFetchMaxBytes(1),
+		kgoconsumer.WithFetchMaxPartitionBytes(1),
 	)
 	if err != nil {
 		tb.Fatalf("creating new kgoconsumer client: %v", err)
