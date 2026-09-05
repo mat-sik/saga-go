@@ -101,15 +101,54 @@ func (c Consumer) pollFetches(ctx context.Context) error {
 	defer c.cancelProcessing.cancel()
 
 	consumer := c.newBatchConsumer()
-	if err := consumer.consumeFetches(consumerCtx, fetches); errors.Is(err, context.Canceled) {
-		slog.Warn("consumption cancelled most likely due to rebalance", "err", err)
-	} else if err != nil {
-		return err
+
+	consumeErr := consumer.consumeFetches(consumerCtx, fetches)
+	consumerCanceled := errors.Is(consumeErr, context.Canceled) || errors.Is(consumeErr, context.DeadlineExceeded)
+	if consumerCanceled {
+		slog.Warn("consumption cancelled", "err", consumeErr)
+	} else if consumeErr != nil {
+		return consumeErr
 	}
 
 	committable := consumer.processedEpochOffsetsTracker.committableEpochOffsets()
+	if err := c.commitOffsets(ctx, committable); err != nil {
+		return err
+	}
 
-	return c.commitOffsets(ctx, committable)
+	if consumerCanceled {
+		c.rewindToCommitted(fetches, committable)
+	}
+
+	return nil
+}
+
+func (c Consumer) rewindToCommitted(fetches kgo.Fetches, committable map[string]map[int32]kgo.EpochOffset) {
+	resetOffsets := make(map[string]map[int32]kgo.EpochOffset)
+
+	fetches.EachPartition(func(p kgo.FetchTopicPartition) {
+		if len(p.Records) == 0 {
+			return
+		}
+
+		topicOffsets, ok := resetOffsets[p.Topic]
+		if !ok {
+			topicOffsets = make(map[int32]kgo.EpochOffset)
+			resetOffsets[p.Topic] = topicOffsets
+		}
+
+		if committed, ok := committable[p.Topic][p.Partition]; ok {
+			topicOffsets[p.Partition] = committed
+			return
+		}
+
+		first := p.Records[0]
+		topicOffsets[p.Partition] = kgo.EpochOffset{
+			Epoch:  first.LeaderEpoch,
+			Offset: first.Offset,
+		}
+	})
+
+	c.client.SetOffsets(resetOffsets)
 }
 
 func (c Consumer) fetchesFatalError(fetches kgo.Fetches) error {
