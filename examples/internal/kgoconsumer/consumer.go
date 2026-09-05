@@ -104,7 +104,7 @@ func (c Consumer) pollFetches(ctx context.Context) error {
 	consumer := c.newBatchConsumer()
 
 	consumeErr := consumer.consumeFetches(consumerCtx, fetches)
-	consumerCanceled := errors.Is(consumeErr, context.Canceled) || errors.Is(consumeErr, context.DeadlineExceeded)
+	consumerCanceled := contextCanceled(consumeErr)
 	if consumerCanceled {
 		slog.Warn("consumption cancelled", "err", consumeErr)
 	} else if consumeErr != nil {
@@ -121,6 +121,10 @@ func (c Consumer) pollFetches(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func contextCanceled(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (c Consumer) rewindToCommitted(fetches kgo.Fetches, committable map[string]map[int32]kgo.EpochOffset) {
