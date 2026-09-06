@@ -99,7 +99,7 @@ func (c Consumer) pollFetches(ctx context.Context) error {
 
 	consumerCtx, cancel := context.WithTimeout(ctx, c.config.processingConfig.timeout)
 	c.cancelProcessing.store(cancel)
-	defer c.cancelProcessing.cancel()
+	defer c.cancelProcessing.release()
 
 	consumer := c.newBatchConsumer()
 

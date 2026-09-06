@@ -15,7 +15,6 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// TODO: test case when before cancel context is created, rebalance triggers and processing should be cancelled
 func TestRebalance(t *testing.T) {
 	ids := map[int32][]int{
 		0: {1, 2},
