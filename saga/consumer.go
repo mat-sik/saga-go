@@ -10,6 +10,12 @@ type Command[T, CT any] interface {
 	ToCompensatingTransaction() (CT, bool)
 }
 
+type PortOut[T, CT any] interface {
+	CommandAlreadyHandled(ctx context.Context, command Command[T, CT]) (bool, error)
+	MarkCommandAsHandled(ctx context.Context, command Command[T, CT]) error
+	TransactionCompensated(ctx context.Context, tx T) (bool, error)
+}
+
 type Consumer[T, CT any] struct {
 	sagaActions []Action[T, CT]
 	portOut     PortOut[T, CT]
