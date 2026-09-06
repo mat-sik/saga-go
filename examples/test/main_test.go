@@ -158,3 +158,9 @@ func (c consumer) joinConsumerGroup(tb testing.TB) {
 		tb.Fatalf("joining consumer group: %v", err)
 	}
 }
+
+func (c consumer) leaveConsumerGroup(tb testing.TB) {
+	if err := c.client.LeaveGroupContext(tb.Context()); err != nil {
+		tb.Fatalf("leaving consumer group: %v", err)
+	}
+}

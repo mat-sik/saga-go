@@ -16,6 +16,121 @@ import (
 )
 
 // TODO: test case when before cancel context is created, rebalance triggers and processing should be cancelled
+func TestRebalance(t *testing.T) {
+	ids := map[int32][]int{
+		0: {1, 2},
+		1: {3, 4, 5},
+		2: {6, 7, 8, 9},
+		3: {10},
+	}
+
+	topic := newTopicName(t, "commands")
+	createTopic(t, topic, len(ids))
+
+	topicDLQ := newTopicName(t, "commands-dlq")
+	createTopic(t, topicDLQ, 1)
+
+	prod := newProducer(t)
+	produceCommands(t, prod, topic, ids)
+
+	consumerGroup := newConsumerGroupName(t, "commands")
+
+	consumptionStarted := make(chan struct{})
+	rebalanceStarted := make(chan struct{}, 1)
+
+	onRebalanceBlocked := kgoconsumer.WithOnRebalanceBlocked(func() {
+		select {
+		case rebalanceStarted <- struct{}{}:
+		default:
+		}
+	})
+
+	var wgStub sync.WaitGroup
+	stub := newRebalanceAwaitingStubConsumer(&wgStub, consumptionStarted, rebalanceStarted, ids)
+	testedConsumer := newTestedConsumer(t, consumerGroup, topic, topicDLQ, stub.consumeRecord, onRebalanceBlocked)
+
+	consumerDoneCh := make(chan error)
+	consumerCtx, cancelConsumer := context.WithCancel(t.Context())
+
+	go func() {
+		if err := testedConsumer.StartPolling(consumerCtx); err != nil {
+			consumerDoneCh <- fmt.Errorf("polling: %w", err)
+			return
+		}
+		consumerDoneCh <- nil
+	}()
+
+	<-consumptionStarted
+
+	rebalanceInvokingConsumer := newConsumer(t, []string{topic}, consumerGroup)
+	rebalanceInvokingConsumer.joinConsumerGroup(t)
+
+	rebalanceInvokingConsumer.leaveConsumerGroup(t)
+
+	wgStub.Wait()
+	cancelConsumer()
+
+	if err := <-consumerDoneCh; err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("consumer polling: %v", err)
+	}
+
+	if !reflect.DeepEqual(stub.processedIDsByPartition, ids) {
+		t.Fatalf(
+			"processed IDs mismatch: got %v, want %v",
+			stub.processedIDsByPartition,
+			ids,
+		)
+	}
+}
+
+type rebalanceAwaitingStubConsumer struct {
+	wg                      *sync.WaitGroup
+	consumptionStarted      chan struct{}
+	rebalanceStarted        chan struct{}
+	processedIDsByPartition map[int32][]int
+	firstConsumption        bool
+}
+
+func newRebalanceAwaitingStubConsumer(
+	wg *sync.WaitGroup,
+	consumptionStarted, rebalanceStarted chan struct{},
+	toProcess map[int32][]int,
+) *rebalanceAwaitingStubConsumer {
+	toProcessAmount := lenValues(toProcess)
+	wg.Add(toProcessAmount)
+
+	return &rebalanceAwaitingStubConsumer{
+		wg:                      wg,
+		consumptionStarted:      consumptionStarted,
+		rebalanceStarted:        rebalanceStarted,
+		processedIDsByPartition: make(map[int32][]int),
+		firstConsumption:        true,
+	}
+}
+
+func (c *rebalanceAwaitingStubConsumer) consumeRecord(ctx context.Context, record *kgo.Record) error {
+	if c.firstConsumption {
+		close(c.consumptionStarted)
+
+		<-c.rebalanceStarted
+
+		c.firstConsumption = false
+	}
+
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("record consuming: %w", err)
+	}
+
+	cmd := newCommand(record)
+
+	ids := c.processedIDsByPartition[record.Partition]
+	c.processedIDsByPartition[record.Partition] = append(ids, cmd.id)
+
+	c.wg.Done()
+
+	return nil
+}
+
 func TestConsumption(t *testing.T) {
 	tests := []struct {
 		name                                    string
@@ -127,7 +242,9 @@ func TestConsumption(t *testing.T) {
 			var wgStub sync.WaitGroup
 
 			stub := newStubConsumer(&wgStub, tt.shouldFailTransientlyTimes, tt.shouldFailPermanently, tt.ids)
-			testedConsumer := newTestedConsumer(t, topic, topicDLQ, stub)
+
+			consumerGroup := newConsumerGroupName(t, "commands")
+			testedConsumer := newTestedConsumer(t, consumerGroup, topic, topicDLQ, stub.consumeRecord)
 
 			consumerDoneCh := make(chan error)
 			consumerCtx, cancelConsumer := context.WithCancel(t.Context())
@@ -192,10 +309,15 @@ func produceCommands(tb testing.TB, producer producer, topic string, idByPartiti
 	producer.produce(tb, records...)
 }
 
-func newTestedConsumer(t *testing.T, topic string, topicDLQ string, stub stubConsumer) kgoconsumer.Consumer {
-	client := newKgoConsumerClient(t, "commands", []string{topic})
+func newTestedConsumer(
+	t *testing.T,
+	consumerGroup, topic, topicDLQ string,
+	recordConsumer kgoconsumer.RecordConsumer,
+	opts ...kgoconsumer.ClientOption,
+) kgoconsumer.Consumer {
+	client := newKgoConsumerClient(t, consumerGroup, []string{topic}, opts...)
 
-	cons, err := kgoconsumer.NewConsumer(client, topicDLQ, stub.consumeRecord, kgoconsumer.WithBackoffMax(100*time.Microsecond))
+	cons, err := kgoconsumer.NewConsumer(client, topicDLQ, recordConsumer, kgoconsumer.WithBackoffMax(100*time.Microsecond))
 	if err != nil {
 		t.Fatalf("creating new kgoconsumer consumer: %v", err)
 	}
@@ -204,15 +326,19 @@ func newTestedConsumer(t *testing.T, topic string, topicDLQ string, stub stubCon
 	return cons
 }
 
-func newKgoConsumerClient(tb testing.TB, consumerGroup string, topics []string) kgoconsumer.Client {
-	consumerGroup = newConsumerGroupName(tb, consumerGroup)
+func newKgoConsumerClient(tb testing.TB, consumerGroup string, topics []string, opts ...kgoconsumer.ClientOption) kgoconsumer.Client {
+	clientOpts := []kgoconsumer.ClientOption{
+		kgoconsumer.WithFetchMaxBytes(1),
+		kgoconsumer.WithFetchMaxPartitionBytes(1),
+	}
+
+	clientOpts = append(clientOpts, opts...)
 
 	client, err := kgoconsumer.NewClient(
 		testKafkaBrokers,
 		consumerGroup,
 		topics,
-		kgoconsumer.WithFetchMaxBytes(1),
-		kgoconsumer.WithFetchMaxPartitionBytes(1),
+		clientOpts...,
 	)
 	if err != nil {
 		tb.Fatalf("creating new kgoconsumer client: %v", err)
@@ -306,13 +432,13 @@ func newStubConsumer(
 	shouldFailTransientlyTimes map[int]int,
 	shouldFailPermanently map[int]struct{},
 	toProcess map[int32][]int,
-) stubConsumer {
+) *stubConsumer {
 	failTimes := calculateFailTimes(shouldFailTransientlyTimes)
 	toProcessAmount := lenValues(toProcess)
 
 	wg.Add(failTimes + toProcessAmount)
 
-	return stubConsumer{
+	return &stubConsumer{
 		wg:                              wg,
 		shouldFailTransientlyTimes:      shouldFailTransientlyTimes,
 		shouldFailPermanently:           shouldFailPermanently,
