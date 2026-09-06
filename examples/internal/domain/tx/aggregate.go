@@ -31,7 +31,7 @@ func NewAggregateSagaAction(
 	}
 }
 
-func (a AggregateSagaAction) Execute(ctx context.Context, cmd RegisterCommand) error {
+func (a AggregateSagaAction) Register(ctx context.Context, cmd RegisterCommand) error {
 	updatedValue, err := a.portOut.Upsert(ctx, cmd.RegisterID, cmd.Value)
 	if err != nil {
 		return fmt.Errorf("upserting tx: %w", err)
@@ -44,7 +44,7 @@ func (a AggregateSagaAction) Execute(ctx context.Context, cmd RegisterCommand) e
 	return nil
 }
 
-func (a AggregateSagaAction) Compensate(ctx context.Context, cmd UnregisterCommand) error {
+func (a AggregateSagaAction) Unregister(ctx context.Context, cmd UnregisterCommand) error {
 	regCmd := cmd.RegisterCommand
 	updatedValue, err := a.portOut.Subtract(ctx, regCmd.RegisterID, regCmd.Value)
 	if err != nil {
@@ -71,13 +71,13 @@ func (a AggregateSagaAction) updateAlarmState(ctx context.Context, playerID stri
 		if err != nil {
 			return fmt.Errorf("generating raise alarm UUIDv7: %w", err)
 		}
-		return a.alarmRaiser.Execute(ctx, alarm.NewRaiseAlarmCommand(id.String(), playerID, alarmValue, updatedValue))
+		return a.alarmRaiser.RaiseAlarm(ctx, alarm.NewRaiseAlarmCommand(id.String(), playerID, alarmValue, updatedValue))
 	case crossedBelow:
 		id, err := uuid.NewV7()
 		if err != nil {
 			return fmt.Errorf("generating clear alarm UUIDv7: %w", err)
 		}
-		return a.alarmRaiser.Compensate(ctx, alarm.NewClearAlarmCommand(id.String(), playerID))
+		return a.alarmRaiser.ClearAlarm(ctx, alarm.NewClearAlarmCommand(id.String(), playerID))
 	default:
 		return nil
 	}

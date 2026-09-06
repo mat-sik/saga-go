@@ -1,5 +1,4 @@
 -- +goose Up
-
 CREATE TABLE processed_transactions
 (
     transaction_id             uuid NOT NULL,

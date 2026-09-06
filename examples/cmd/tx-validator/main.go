@@ -15,9 +15,9 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/adapters/postgres"
 	"github.com/mat-sik/saga-go/examples/internal/config"
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
+	"github.com/mat-sik/saga-go/examples/internal/idempotent"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/mat-sik/saga-go/examples/internal/migrations"
-	"github.com/mat-sik/saga-go/saga"
 )
 
 func main() {
@@ -41,7 +41,7 @@ func run() int {
 	}
 	defer pool.Close()
 
-	if err = migrations.RunSagaConsumer(pool); err != nil {
+	if err = migrations.RunIdempotentConsumer(pool); err != nil {
 		slog.Error("running tx-consumer migrations", "err", err)
 		return 1
 	}
@@ -98,11 +98,15 @@ func newConsumer(conf config.TxValidator, pool *pgxpool.Pool) (kgoconsumer.Consu
 
 	validator := tx.NewValidator(kafka.NewRandomValidator(kafkaClient.ToKgo(), conf.TransactionsTopic, conf.CompensatePercent))
 
-	actions := []saga.Action[tx.RegisterCommand, tx.UnregisterCommand]{
-		validator,
+	recordConsumers := []func(context.Context, tx.RegisterCommand) error{
+		validator.ValidateAndCompensate,
 	}
 
-	sagaConsumer := saga.NewConsumer(actions, postgres.NewTxConsumerRepository())
+	idempotentConsumer := idempotent.NewConsumer(recordConsumers, postgres.NewTxConsumerRepository())
 
-	return kafka.NewTxSagaConsumer(kafkaClient, pool, conf.TransactionsDLQTopic, sagaConsumer)
+	txRunner := func(ctx context.Context, fn func(context.Context) error) error {
+		return postgres.WithTx(ctx, pool, fn)
+	}
+
+	return kafka.NewTxConsumer(kafkaClient, txRunner, conf.TransactionsDLQTopic, idempotentConsumer)
 }

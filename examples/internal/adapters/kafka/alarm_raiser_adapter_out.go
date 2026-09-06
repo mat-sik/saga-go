@@ -65,7 +65,7 @@ func newRaiseAlarmRecord(cmd alarm.RaiseAlarmCommand) RaiseAlarmRecord {
 	}
 }
 
-func (r RaiseAlarmRecord) toRaiseAlarmCommand(playerID string) alarm.RaiseAlarmCommand {
+func (r RaiseAlarmRecord) ToRaiseAlarmCommand(playerID string) alarm.RaiseAlarmCommand {
 	return alarm.NewRaiseAlarmCommand(r.ID, playerID, r.AlarmValue, r.Value)
 }
 
@@ -79,7 +79,7 @@ func newClearAlarmRecord(cmd alarm.ClearAlarmCommand) ClearAlarmRecord {
 	}
 }
 
-func (r ClearAlarmRecord) toClearAlarmCommand(playerID string) alarm.ClearAlarmCommand {
+func (r ClearAlarmRecord) ToClearAlarmCommand(playerID string) alarm.ClearAlarmCommand {
 	return alarm.NewClearAlarmCommand(r.ID, playerID)
 }
 

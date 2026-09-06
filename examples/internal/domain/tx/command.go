@@ -34,14 +34,6 @@ func NewRegisterCommand(transactionID, playerID, currency string, time time.Time
 	}
 }
 
-func (r RegisterCommand) ToTransaction() (RegisterCommand, bool) {
-	return r, true
-}
-
-func (r RegisterCommand) ToCompensatingTransaction() (UnregisterCommand, bool) {
-	return UnregisterCommand{}, false
-}
-
 type UnregisterCommand struct {
 	ID              string
 	RegisterCommand RegisterCommand
@@ -54,12 +46,4 @@ func NewUnregisterCommand(transactionID string, time time.Time, registerCommand 
 		RegisterCommand: registerCommand,
 		Time:            time,
 	}
-}
-
-func (u UnregisterCommand) ToTransaction() (RegisterCommand, bool) {
-	return RegisterCommand{}, false
-}
-
-func (u UnregisterCommand) ToCompensatingTransaction() (UnregisterCommand, bool) {
-	return u, true
 }

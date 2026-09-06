@@ -21,14 +21,14 @@ func NewLogSagaAction(portOut LogPortOut) LogSagaAction {
 	}
 }
 
-func (l LogSagaAction) Execute(ctx context.Context, registerCommand RegisterCommand) error {
+func (l LogSagaAction) Register(ctx context.Context, registerCommand RegisterCommand) error {
 	if err := l.portOut.InsertLog(ctx, registerCommand); err != nil {
 		return fmt.Errorf("inserting log: %w", err)
 	}
 	return nil
 }
 
-func (l LogSagaAction) Compensate(ctx context.Context, unregisterCommand UnregisterCommand) error {
+func (l LogSagaAction) Unregister(ctx context.Context, unregisterCommand UnregisterCommand) error {
 	if err := l.portOut.InsertCompensatingLog(
 		ctx,
 		unregisterCommand.ID,

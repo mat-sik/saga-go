@@ -4,141 +4,63 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/mat-sik/saga-go/examples/internal/adapters/postgres"
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
+	"github.com/mat-sik/saga-go/examples/internal/idempotent"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
-	"github.com/mat-sik/saga-go/saga"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-func NewTxSagaConsumer(
+func NewTxConsumer(
 	client kgoconsumer.Client,
-	pool *pgxpool.Pool,
+	runTx TxRunner,
 	dlqTopic string,
-	sagaConsumer saga.Consumer[tx.RegisterCommand, tx.UnregisterCommand],
+	idempotentConsumer idempotent.Consumer[tx.RegisterCommand],
 	options ...kgoconsumer.Option,
 ) (kgoconsumer.Consumer, error) {
-	consumer := kgoSagaConsumer{
-		pool:     pool,
-		consumer: sagaConsumer,
+	consumeRecord := func(ctx context.Context, record *kgo.Record) error {
+		registerCommand, ok, err := mapToRegisterCommand(record)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+
+		consume := func(ctx context.Context) error {
+			if err := idempotentConsumer.Consume(ctx, registerCommand); err != nil {
+				return fmt.Errorf("consuming register command %v: %w", registerCommand, err)
+			}
+			return nil
+		}
+		return runTx(ctx, consume)
 	}
 
 	return kgoconsumer.NewConsumer(
 		client,
 		dlqTopic,
-		consumer.consumeRecord,
+		consumeRecord,
 		options...,
 	)
 }
 
-type kgoSagaConsumer struct {
-	pool     *pgxpool.Pool
-	consumer saga.Consumer[tx.RegisterCommand, tx.UnregisterCommand]
-}
-
-func (k kgoSagaConsumer) consumeRecord(ctx context.Context, record *kgo.Record) (err error) {
-	command, err := mapToTxCommand(record)
-	if err != nil {
-		return err
-	}
-
-	consume := func(txCtx context.Context) error {
-		if err = k.consumer.Consume(txCtx, command); err != nil {
-			return fmt.Errorf("consuming command %v: %w", command, err)
-		}
-		return nil
-	}
-
-	return postgres.WithTx(ctx, k.pool, consume)
-}
-
-func mapToTxCommand(record *kgo.Record) (saga.Command[tx.RegisterCommand, tx.UnregisterCommand], error) {
+func mapToRegisterCommand(record *kgo.Record) (tx.RegisterCommand, bool, error) {
 	cmdType, err := headerValue(record, CmdTypeHeader)
 	if err != nil {
-		return nil, err
+		return tx.RegisterCommand{}, false, err
 	}
 
 	switch cmdType {
 	case CmdTypeRegister:
 		var registerRecord RegisterRecord
 		if err = json.Unmarshal(record.Value, &registerRecord); err != nil {
-			return nil, fmt.Errorf("unmarshaling register record: %w", err)
+			return tx.RegisterCommand{}, false, fmt.Errorf("unmarshaling register record: %w", err)
 		}
 		transactionID := string(record.Key)
-		return registerRecord.toRegisterCommand(transactionID), nil
+		return registerRecord.toRegisterCommand(transactionID), true, nil
 	case CmdTypeUnregister:
-		var unregisterRecord UnregisterRecord
-		if err = json.Unmarshal(record.Value, &unregisterRecord); err != nil {
-			return nil, fmt.Errorf("unmarshaling unregister record: %w", err)
-		}
-		registerRecordTransactionID := string(record.Key)
-		return unregisterRecord.toUnregisterCommand(registerRecordTransactionID), nil
+		return tx.RegisterCommand{}, false, err
 	default:
-		return nil, fmt.Errorf("unsupported cmdType %s", cmdType)
+		return tx.RegisterCommand{}, false, fmt.Errorf("unsupported cmdType %s", cmdType)
 	}
 }
-
-type RegisterRecord struct {
-	PlayerID string    `json:"playerId"`
-	Currency string    `json:"currency"`
-	Value    int       `json:"value"`
-	Time     time.Time `json:"time"`
-}
-
-func NewRegisterRecord(playerID, currency string, value int, time time.Time) RegisterRecord {
-	return RegisterRecord{
-		PlayerID: playerID,
-		Currency: currency,
-		Value:    value,
-		Time:     time,
-	}
-}
-
-func (r RegisterRecord) toRegisterCommand(transactionID string) tx.RegisterCommand {
-	return tx.NewRegisterCommand(transactionID, r.PlayerID, r.Currency, r.Time, r.Value)
-}
-
-type UnregisterRecord struct {
-	ID             string         `json:"id"`
-	Time           time.Time      `json:"time"`
-	RegisterRecord RegisterRecord `json:"registerRecord"`
-}
-
-func NewUnregisterRecord(id string, time time.Time, cmd tx.RegisterCommand) UnregisterRecord {
-	registerID := cmd.RegisterID
-	registerRecordID := registerID.ID
-
-	return UnregisterRecord{
-		ID:   id,
-		Time: time,
-		RegisterRecord: NewRegisterRecord(
-			registerRecordID.PlayerID,
-			registerRecordID.Currency,
-			cmd.Value,
-			registerID.Time,
-		),
-	}
-}
-
-func (r UnregisterRecord) toUnregisterCommand(registerRecordTransactionID string) tx.UnregisterCommand {
-	registerCommand := r.RegisterRecord.toRegisterCommand(registerRecordTransactionID)
-	return tx.NewUnregisterCommand(r.ID, r.Time, registerCommand)
-}
-
-func headerValue(record *kgo.Record, key string) (string, error) {
-	for _, header := range record.Headers {
-		if header.Key == key {
-			return string(header.Value), nil
-		}
-	}
-	return "", fmt.Errorf("record missing %s header", key)
-}
-
-const (
-	CmdTypeHeader     = "cmd-type"
-	CmdTypeRegister   = "register"
-	CmdTypeUnregister = "unregister"
-)

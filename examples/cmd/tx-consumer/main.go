@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/kafka"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/postgres"
+	"github.com/mat-sik/saga-go/examples/internal/adapters/sagaadapters"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/static"
 	"github.com/mat-sik/saga-go/examples/internal/config"
 	"github.com/mat-sik/saga-go/examples/internal/domain/alarm"
@@ -107,16 +108,20 @@ func newConsumer(conf config.TxConsumer, pool *pgxpool.Pool) (kgoconsumer.Consum
 
 	logAction := tx.NewLogSagaAction(postgres.NewLogRepository())
 
-	txAction := tx.NewSagaAction(logAction, aggregateAction)
+	txAction := sagaadapters.NewTxAction(logAction, aggregateAction)
 
-	countAction := count.NewSagaAction[tx.RegisterCommand, tx.UnregisterCommand](postgres.NewCountRepository())
+	countAction := count.NewSagaAction[sagaadapters.RegisterSagaCommand, sagaadapters.UnregisterSagaCommand](postgres.NewCountRepository())
 
-	actions := []saga.Action[tx.RegisterCommand, tx.UnregisterCommand]{
+	actions := []saga.Action[sagaadapters.RegisterSagaCommand, sagaadapters.UnregisterSagaCommand]{
 		txAction,
 		countAction,
 	}
 
-	sagaConsumer := saga.NewConsumer(actions, postgres.NewTxConsumerRepository())
+	sagaConsumer := saga.NewConsumer(actions, postgres.NewTxSagaConsumerRepository())
 
-	return kafka.NewTxSagaConsumer(kafkaClient, pool, conf.TransactionsDLQTopic, sagaConsumer)
+	txRunner := func(ctx context.Context, fn func(context.Context) error) error {
+		return postgres.WithTx(ctx, pool, fn)
+	}
+
+	return kafka.NewTxSagaConsumer(kafkaClient, txRunner, conf.TransactionsDLQTopic, sagaConsumer)
 }

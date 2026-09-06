@@ -5,14 +5,18 @@ import (
 	"testing"
 
 	"github.com/mat-sik/saga-go/examples/internal/domain/alarm"
-	"github.com/mat-sik/saga-go/saga"
 )
+
+type testCmd struct {
+	register   *RegisterCommand
+	unregister *UnregisterCommand
+}
 
 func TestAggregateSagaAction(t *testing.T) {
 	tests := []struct {
 		name      string
 		initState initState
-		cmd       []saga.Command[RegisterCommand, UnregisterCommand]
+		cmd       []testCmd
 		wantState endState
 	}{
 		{
@@ -22,13 +26,9 @@ func TestAggregateSagaAction(t *testing.T) {
 				alarmValue:      100,
 				alarmRaised:     false,
 			},
-			cmd: []saga.Command[RegisterCommand, UnregisterCommand]{
-				RegisterCommand{
-					Value: 50,
-				},
-				RegisterCommand{
-					Value: 30,
-				},
+			cmd: []testCmd{
+				{register: &RegisterCommand{Value: 50}},
+				{register: &RegisterCommand{Value: 30}},
 			},
 			wantState: endState{
 				aggregatedValue: 80,
@@ -42,13 +42,9 @@ func TestAggregateSagaAction(t *testing.T) {
 				alarmValue:      100,
 				alarmRaised:     false,
 			},
-			cmd: []saga.Command[RegisterCommand, UnregisterCommand]{
-				RegisterCommand{
-					Value: 50,
-				},
-				RegisterCommand{
-					Value: 30,
-				},
+			cmd: []testCmd{
+				{register: &RegisterCommand{Value: 50}},
+				{register: &RegisterCommand{Value: 30}},
 			},
 			wantState: endState{
 				aggregatedValue: 100,
@@ -62,15 +58,11 @@ func TestAggregateSagaAction(t *testing.T) {
 				alarmValue:      100,
 				alarmRaised:     false,
 			},
-			cmd: []saga.Command[RegisterCommand, UnregisterCommand]{
-				RegisterCommand{
-					Value: 100,
-				},
-				UnregisterCommand{
-					RegisterCommand: RegisterCommand{
-						Value: 100,
-					},
-				},
+			cmd: []testCmd{
+				{register: &RegisterCommand{Value: 100}},
+				{unregister: &UnregisterCommand{
+					RegisterCommand: RegisterCommand{Value: 100},
+				}},
 			},
 			wantState: endState{
 				aggregatedValue: 0,
@@ -84,15 +76,11 @@ func TestAggregateSagaAction(t *testing.T) {
 				alarmValue:      100,
 				alarmRaised:     true,
 			},
-			cmd: []saga.Command[RegisterCommand, UnregisterCommand]{
-				RegisterCommand{
-					Value: 100,
-				},
-				UnregisterCommand{
-					RegisterCommand: RegisterCommand{
-						Value: 100,
-					},
-				},
+			cmd: []testCmd{
+				{register: &RegisterCommand{Value: 100}},
+				{unregister: &UnregisterCommand{
+					RegisterCommand: RegisterCommand{Value: 100},
+				}},
 			},
 			wantState: endState{
 				aggregatedValue: 100,
@@ -106,19 +94,12 @@ func TestAggregateSagaAction(t *testing.T) {
 				alarmValue:      100,
 				alarmRaised:     true,
 			},
-			cmd: []saga.Command[RegisterCommand, UnregisterCommand]{
-				RegisterCommand{
-					Value: 100,
-				},
-
-				RegisterCommand{
-					Value: 50,
-				},
-				UnregisterCommand{
-					RegisterCommand: RegisterCommand{
-						Value: 50,
-					},
-				},
+			cmd: []testCmd{
+				{register: &RegisterCommand{Value: 100}},
+				{register: &RegisterCommand{Value: 50}},
+				{unregister: &UnregisterCommand{
+					RegisterCommand: RegisterCommand{Value: 50},
+				}},
 			},
 			wantState: endState{
 				aggregatedValue: 200,
@@ -130,18 +111,19 @@ func TestAggregateSagaAction(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			aggregatePortOut, alarmValueProviderPortOut, alarmRaiserPortOut := writeInitState(tt.initState)
 
-			aggregateSagaAction := AggregateSagaAction{
-				portOut:            &aggregatePortOut,
-				alarmValueProvider: alarm.NewAlarmValueProvider(alarmValueProviderPortOut),
-				alarmRaiser:        alarm.NewAlarmRaiser(&alarmRaiserPortOut),
-			}
+			aggregateSagaAction := NewAggregateSagaAction(
+				&aggregatePortOut,
+				alarm.NewAlarmValueProvider(alarmValueProviderPortOut),
+				alarm.NewAlarmRaiser(&alarmRaiserPortOut),
+			)
 
 			for _, cmd := range tt.cmd {
-				if regCmd, ok := cmd.ToTransaction(); ok {
-					_ = aggregateSagaAction.Execute(context.Background(), regCmd)
-				} else if unregCmd, ok := cmd.ToCompensatingTransaction(); ok {
-					_ = aggregateSagaAction.Compensate(context.Background(), unregCmd)
-				} else {
+				switch {
+				case cmd.register != nil:
+					_ = aggregateSagaAction.Register(context.Background(), *cmd.register)
+				case cmd.unregister != nil:
+					_ = aggregateSagaAction.Unregister(context.Background(), *cmd.unregister)
+				default:
 					t.Fatalf("unsupported cmd: %v", cmd)
 				}
 			}

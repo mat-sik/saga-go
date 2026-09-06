@@ -18,6 +18,10 @@ func RunSagaConsumer(pool *pgxpool.Pool) error {
 	return run(pool, "db/migrations/saga-consumer")
 }
 
+func RunIdempotentConsumer(pool *pgxpool.Pool) error {
+	return run(pool, "db/migrations/idempotent-consumer")
+}
+
 func run(pool *pgxpool.Pool, dir string) (err error) {
 	wrappedPool := stdlib.OpenDBFromPool(pool)
 	defer func() {

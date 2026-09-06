@@ -7,7 +7,7 @@ import (
 
 type ValidatorPortOut interface {
 	Validate(ctx context.Context, registerCommand RegisterCommand) (bool, error)
-	Compensate(ctx context.Context, registerCommand RegisterCommand) error
+	Unregister(ctx context.Context, registerCommand RegisterCommand) error
 }
 
 type Validator struct {
@@ -20,10 +20,6 @@ func NewValidator(portOut ValidatorPortOut) Validator {
 	}
 }
 
-func (v Validator) Execute(ctx context.Context, command RegisterCommand) error {
-	return v.ValidateAndCompensate(ctx, command)
-}
-
 func (v Validator) ValidateAndCompensate(ctx context.Context, registerCommand RegisterCommand) error {
 	valid, err := v.portOut.Validate(ctx, registerCommand)
 	if err != nil {
@@ -34,12 +30,8 @@ func (v Validator) ValidateAndCompensate(ctx context.Context, registerCommand Re
 		return nil
 	}
 
-	if err = v.portOut.Compensate(ctx, registerCommand); err != nil {
+	if err = v.portOut.Unregister(ctx, registerCommand); err != nil {
 		return fmt.Errorf("compensating %v: %w", registerCommand, err)
 	}
-	return nil
-}
-
-func (v Validator) Compensate(_ context.Context, _ UnregisterCommand) error {
 	return nil
 }

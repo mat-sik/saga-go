@@ -18,11 +18,7 @@ func NewAlarmRaiser(portOut RaiserPortOut) Raiser {
 	return Raiser{portOut: portOut}
 }
 
-func (ar Raiser) Execute(ctx context.Context, cmd RaiseAlarmCommand) error {
-	return ar.raiseAlarm(ctx, cmd)
-}
-
-func (ar Raiser) raiseAlarm(ctx context.Context, cmd RaiseAlarmCommand) error {
+func (ar Raiser) RaiseAlarm(ctx context.Context, cmd RaiseAlarmCommand) error {
 	if err := ar.portOut.RaiseAlarm(ctx, cmd); err != nil {
 		return fmt.Errorf("raising alarm of player %s %d/%d: %w", cmd.PlayerID, cmd.Value, cmd.AlarmValue, err)
 	}
@@ -36,14 +32,6 @@ type RaiseAlarmCommand struct {
 	Value      int
 }
 
-func (r RaiseAlarmCommand) ToTransaction() (RaiseAlarmCommand, bool) {
-	return r, true
-}
-
-func (r RaiseAlarmCommand) ToCompensatingTransaction() (ClearAlarmCommand, bool) {
-	return ClearAlarmCommand{}, false
-}
-
 func NewRaiseAlarmCommand(id string, playerID string, alarmValue, value int) RaiseAlarmCommand {
 	return RaiseAlarmCommand{
 		ID:         id,
@@ -53,11 +41,7 @@ func NewRaiseAlarmCommand(id string, playerID string, alarmValue, value int) Rai
 	}
 }
 
-func (ar Raiser) Compensate(ctx context.Context, cmd ClearAlarmCommand) error {
-	return ar.clearAlarm(ctx, cmd)
-}
-
-func (ar Raiser) clearAlarm(ctx context.Context, cmd ClearAlarmCommand) error {
+func (ar Raiser) ClearAlarm(ctx context.Context, cmd ClearAlarmCommand) error {
 	if err := ar.portOut.ClearAlarm(ctx, cmd); err != nil {
 		return fmt.Errorf("clearing alarm of player %s: %w", cmd.PlayerID, err)
 	}
@@ -67,14 +51,6 @@ func (ar Raiser) clearAlarm(ctx context.Context, cmd ClearAlarmCommand) error {
 type ClearAlarmCommand struct {
 	ID       string
 	PlayerID string
-}
-
-func (c ClearAlarmCommand) ToTransaction() (RaiseAlarmCommand, bool) {
-	return RaiseAlarmCommand{}, false
-}
-
-func (c ClearAlarmCommand) ToCompensatingTransaction() (ClearAlarmCommand, bool) {
-	return c, true
 }
 
 func NewClearAlarmCommand(id string, playerID string) ClearAlarmCommand {

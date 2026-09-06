@@ -15,6 +15,7 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/adapters/kafka"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/mail"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/postgres"
+	"github.com/mat-sik/saga-go/examples/internal/adapters/sagaadapters"
 	"github.com/mat-sik/saga-go/examples/internal/config"
 	"github.com/mat-sik/saga-go/examples/internal/domain/alarm"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
@@ -102,11 +103,15 @@ func newConsumer(conf config.MailSender, pool *pgxpool.Pool) (kgoconsumer.Consum
 	mailSender := mail.NewAlarmMailSender(auth, conf.SMTPAddr(), conf.MailFrom, conf.MailTo)
 	alarmRaiser := alarm.NewAlarmRaiser(mailSender)
 
-	actions := []saga.Action[alarm.RaiseAlarmCommand, alarm.ClearAlarmCommand]{
-		alarmRaiser,
+	actions := []saga.Action[sagaadapters.RaiseAlarmSagaCommand, sagaadapters.ClearAlarmSagaCommand]{
+		sagaadapters.NewAlarmAction(alarmRaiser),
 	}
 
 	sagaConsumer := saga.NewConsumer(actions, postgres.NewAlarmConsumerRepository())
 
-	return kafka.NewAlarmSagaConsumer(kafkaClient, pool, conf.AlarmsDLQTopic, sagaConsumer)
+	txRunner := func(ctx context.Context, fn func(context.Context) error) error {
+		return postgres.WithTx(ctx, pool, fn)
+	}
+
+	return kafka.NewAlarmSagaConsumer(kafkaClient, txRunner, conf.AlarmsDLQTopic, sagaConsumer)
 }
