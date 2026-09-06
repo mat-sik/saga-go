@@ -16,6 +16,8 @@ import (
 )
 
 func TestRebalance_CancelledBatchIsRefetchedWithoutRevoke(t *testing.T) {
+	t.Parallel()
+
 	ids := map[int32][]int{0: {1, 2}}
 
 	topic := newTopicName(t, "commands")
@@ -89,6 +91,8 @@ func (c *cancelledBatchStubConsumer) consumeRecord(ctx context.Context, record *
 }
 
 func TestRebalance(t *testing.T) {
+	t.Parallel()
+
 	ids := map[int32][]int{
 		0: {1, 2},
 		1: {3, 4, 5},
@@ -205,6 +209,8 @@ func (c *rebalanceAwaitingStubConsumer) consumeRecord(ctx context.Context, recor
 }
 
 func TestConsumption(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                                    string
 		ids                                     map[int32][]int
@@ -303,6 +309,8 @@ func TestConsumption(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			topic := newTopicName(t, "commands")
 			createTopic(t, topic, len(tt.ids))
 
