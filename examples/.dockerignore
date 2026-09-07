@@ -1,0 +1,7 @@
+.env
+.git
+Makefile
+test/
+**/*_test.go
+scripts/
+docker-compose.yaml
