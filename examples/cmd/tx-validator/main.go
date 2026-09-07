@@ -40,7 +40,7 @@ func run() int {
 	defer pool.Close()
 
 	if err = migrations.RunIdempotentConsumer(pool); err != nil {
-		slog.Error("running tx-consumer migrations", "err", err)
+		slog.Error("running tx-validator migrations", "err", err)
 		return 1
 	}
 

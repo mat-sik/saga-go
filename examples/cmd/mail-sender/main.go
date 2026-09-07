@@ -31,7 +31,7 @@ func run() int {
 
 	conf, err := config.NewMailSender(ctx)
 	if err != nil {
-		slog.Error("reading tx-validator config", "err", err)
+		slog.Error("reading mail-sender config", "err", err)
 		return 1
 	}
 
@@ -43,7 +43,7 @@ func run() int {
 	defer pool.Close()
 
 	if err = migrations.RunSagaConsumer(pool); err != nil {
-		slog.Error("running tx-consumer migrations", "err", err)
+		slog.Error("running mail-sender migrations", "err", err)
 		return 1
 	}
 
