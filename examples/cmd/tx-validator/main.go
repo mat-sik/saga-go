@@ -3,11 +3,9 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -46,47 +44,19 @@ func run() int {
 		return 1
 	}
 
-	errCh := make(chan error, conf.ConsumerCount)
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	var wg sync.WaitGroup
-	for range conf.ConsumerCount {
-		wg.Go(func() {
-			consumer, err := newConsumer(conf, pool)
-			if err != nil {
-				errCh <- fmt.Errorf("creating consumer: %w", err)
-				return
-			}
-			defer consumer.Close()
-			if err = consumer.StartPolling(ctx); err != nil {
-				errCh <- fmt.Errorf("polling: %w", err)
-				return
-			}
-			errCh <- nil
-		})
+	consumerFactory := func() (kgoconsumer.Consumer, error) {
+		return newTxConsumer(conf, pool)
 	}
 
-	var errs []error
-	for range conf.ConsumerCount {
-		if err = <-errCh; err != nil {
-			cancel()
-			errs = append(errs, err)
-		}
-	}
-
-	wg.Wait()
-
-	if len(errs) > 0 {
-		slog.Error("consumer", "err", errors.Join(errs...))
+	if err := kgoconsumer.Run(ctx, conf.ConsumerCount, consumerFactory); err != nil {
+		slog.Error("consumer", "err", errors.Join(err))
 		return 1
 	}
 
 	return 0
 }
 
-func newConsumer(conf config.TxValidator, pool *pgxpool.Pool) (kgoconsumer.Consumer, error) {
+func newTxConsumer(conf config.TxValidator, pool *pgxpool.Pool) (kgoconsumer.Consumer, error) {
 	kafkaClient, err := kgoconsumer.NewClient(
 		conf.KafkaSeeds,
 		conf.TransactionsTopicConsumerGroup,
