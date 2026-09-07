@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+jobs:
+  examples-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: examples/go.mod
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          working-directory: examples
+
+  saga-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: saga/go.mod
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          working-directory: saga
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: examples/go.mod
+      - run: make test
+        working-directory: examples
