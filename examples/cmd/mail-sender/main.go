@@ -69,7 +69,10 @@ func newAlarmSagaConsumer(conf config.MailSender, pool *pgxpool.Pool) (kgoconsum
 		return kgoconsumer.Consumer{}, err
 	}
 
-	auth := smtp.PlainAuth("", conf.SMTPUsername, conf.SMTPPassword, conf.SMTPHost)
+	var auth smtp.Auth
+	if !isDev(conf) {
+		auth = smtp.PlainAuth("", conf.SMTPUsername, conf.SMTPPassword, conf.SMTPHost)
+	}
 	mailSender := mail.NewAlarmMailSender(auth, conf.SMTPAddr(), conf.MailFrom, conf.MailTo)
 	alarmRaiser := alarm.NewAlarmRaiser(mailSender)
 
@@ -84,4 +87,8 @@ func newAlarmSagaConsumer(conf config.MailSender, pool *pgxpool.Pool) (kgoconsum
 	}
 
 	return kafka.NewAlarmSagaConsumer(kafkaClient, txRunner, conf.AlarmsDLQTopic, sagaConsumer)
+}
+
+func isDev(conf config.MailSender) bool {
+	return conf.SMTPUsername == ""
 }
