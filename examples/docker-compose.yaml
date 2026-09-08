@@ -1,0 +1,210 @@
+services:
+  tx-producer:
+    image: tx-producer:0.0.1
+    restart: on-failure
+    networks:
+      - net
+    depends_on:
+      kafka-topics-init:
+        condition: service_completed_successfully
+    environment:
+      TX_PRODUCER_KAFKA_SEEDS: kafka-broker:9092
+      TX_PRODUCER_KAFKA_TRANSACTIONS_TOPIC: transactions
+      TX_PRODUCER_PRODUCE_AMOUNT: 1000
+      TX_PRODUCER_GENERATOR_CURRENCIES: EUR,USD,PLN
+      TX_PRODUCER_GENERATOR_PLAYER_ID_AMOUNT: 10
+      TX_PRODUCER_GENERATOR_TRANSACTION_ID_AMOUNT: 10
+      TX_PRODUCER_GENERATOR_DAYS_AMOUNT: 10
+      TX_PRODUCER_GENERATOR_MAX_VALUE: 100
+
+  tx-consumer:
+    image: tx-consumer:0.0.1
+    restart: on-failure
+    networks:
+      - net
+    depends_on:
+      tx-consumer-db:
+        condition: service_healthy
+      kafka-topics-init:
+        condition: service_completed_successfully
+    environment:
+      TX_CONSUMER_DATABASE_URL: postgres://tx-consumer:tx-consumer@tx-consumer-db:5432/tx-consumer
+      TX_CONSUMER_KAFKA_SEEDS: kafka-broker:9092
+      TX_CONSUMER_KAFKA_TRANSACTIONS_TOPIC: transactions
+      TX_CONSUMER_KAFKA_TRANSACTIONS_DLQ_TOPIC: transactions-dlq
+      TX_CONSUMER_KAFKA_TRANSACTIONS_TOPIC_CONSUMER_GROUP: tx-consumer
+      TX_CONSUMER_KAFKA_ALARM_TOPIC: alarms
+      TX_CONSUMER_KAFKA_CONSUMER_COUNT: 1
+      TX_CONSUMER_ALARM_VALUE: 50
+
+  tx-consumer-db:
+    image: postgres:18.4-alpine
+    restart: on-failure
+    networks:
+      - net
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_DB: tx-consumer
+      POSTGRES_USER: tx-consumer
+      POSTGRES_PASSWORD: tx-consumer
+    healthcheck:
+      test: [ CMD-SHELL, 'pg_isready -U tx-consumer -d tx-consumer' ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - tx-consumer:/var/lib/postgresql
+
+  tx-validator:
+    image: tx-validator:0.0.1
+    restart: on-failure
+    networks:
+      - net
+    depends_on:
+      tx-validator-db:
+        condition: service_healthy
+      kafka-topics-init:
+        condition: service_completed_successfully
+    environment:
+      TX_VALIDATOR_DATABASE_URL: postgres://tx-validator:tx-validator@tx-validator-db:5432/tx-validator
+      TX_VALIDATOR_KAFKA_SEEDS: kafka-broker:9092
+      TX_VALIDATOR_KAFKA_TRANSACTIONS_TOPIC: transactions
+      TX_VALIDATOR_KAFKA_TRANSACTIONS_DLQ_TOPIC: transactions-dlq
+      TX_VALIDATOR_KAFKA_TRANSACTIONS_TOPIC_CONSUMER_GROUP: tx-validator
+      TX_VALIDATOR_KAFKA_CONSUMER_COUNT: 5
+      TX_VALIDATOR_KAFKA_COMPENSATE_PERCENT: 90
+
+  tx-validator-db:
+    image: postgres:18.4-alpine
+    restart: on-failure
+    networks:
+      - net
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_DB: tx-validator
+      POSTGRES_USER: tx-validator
+      POSTGRES_PASSWORD: tx-validator
+    healthcheck:
+      test: [ CMD-SHELL, 'pg_isready -U tx-validator -d tx-validator' ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - tx-validator:/var/lib/postgresql
+
+  mail-sender:
+    image: mail-sender:0.0.1
+    restart: on-failure
+    networks:
+      - net
+    depends_on:
+      mail-sender-db:
+        condition: service_healthy
+      kafka-topics-init:
+        condition: service_completed_successfully
+      mailhog:
+        condition: service_started
+    environment:
+      MAIL_SENDER_DATABASE_URL: postgres://mail-sender:mail-sender@mail-sender-db:5432/mail-sender
+      MAIL_SENDER_KAFKA_SEEDS: kafka-broker:9092
+      MAIL_SENDER_KAFKA_ALARMS_TOPIC: alarms
+      MAIL_SENDER_KAFKA_ALARMS_DLQ_TOPIC: alarms-dlq
+      MAIL_SENDER_KAFKA_ALARMS_TOPIC_CONSUMER_GROUP: mail-sender
+      MAIL_SENDER_KAFKA_CONSUMER_COUNT: 5
+      MAIL_SENDER_SMTP_HOST: mailhog
+      MAIL_SENDER_SMTP_PORT: 1025
+      MAIL_SENDER_SMTP_USERNAME: ""
+      MAIL_SENDER_SMTP_PASSWORD: ""
+      MAIL_SENDER_MAIL_FROM: alerts@local.test
+      MAIL_SENDER_MAIL_TO: you@local.test
+
+  mail-sender-db:
+    image: postgres:18.4-alpine
+    restart: on-failure
+    networks:
+      - net
+    ports:
+      - '5434:5432'
+    environment:
+      POSTGRES_DB: mail-sender
+      POSTGRES_USER: mail-sender
+      POSTGRES_PASSWORD: mail-sender
+    healthcheck:
+      test: [ CMD-SHELL, 'pg_isready -U mail-sender -d mail-sender' ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - mail-sender:/var/lib/postgresql
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    restart: on-failure
+    networks:
+      - net
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+
+  kafka-topics-init:
+    image: apache/kafka:4.3.1
+    restart: no
+    networks:
+      - net
+    depends_on:
+      kafka-broker:
+        condition: service_healthy
+    environment:
+      KAFKA_INIT_TOPICS_BOOTSTRAP_SERVER: kafka-broker:9092
+    volumes:
+      - ./scripts/create-topics.sh:/scripts/create-topics.sh:ro
+    entrypoint: [ /bin/sh, /scripts/create-topics.sh ]
+
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.5.0
+    restart: on-failure
+    networks:
+      - net
+    ports:
+      - '8080:8080'
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-broker:9092
+
+  kafka-broker:
+    image: apache/kafka:4.3.1
+    restart: on-failure
+    networks:
+      - net
+    ports:
+      - '9092:19092'
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_INTER_BROKER_LISTENER_NAME: BROKER
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CLIENT:PLAINTEXT,CLIENT_EXPOSED:PLAINTEXT,BROKER:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_LISTENERS: CLIENT://:9092,CLIENT_EXPOSED://:19092,BROKER://:19093,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: CLIENT://kafka-broker:9092,CLIENT_EXPOSED://localhost:9092,BROKER://kafka-broker:19093
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-broker:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    healthcheck:
+      test: [ CMD-SHELL, '/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092' ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - kafka-broker-data:/var/lib/kafka/data
+
+volumes:
+  tx-consumer:
+  tx-validator:
+  mail-sender:
+  kafka-broker-data:
+
+networks:
+  net:
