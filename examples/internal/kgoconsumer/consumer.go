@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/mat-sik/saga-go/examples/internal/kotelinit"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
 )
@@ -23,6 +24,8 @@ func NewClient(seeds []string, consumerGroup string, topics []string, opts ...Cl
 	cfg := newClientConfig(opts...)
 	cancelProcessing := newCancelProcessingStore()
 
+	kOTelService := kotelinit.NewKOTel()
+
 	kgoOpts := []kgo.Opt{
 		kgo.SeedBrokers(seeds...),
 		kgo.ConsumerGroup(consumerGroup),
@@ -33,6 +36,7 @@ func NewClient(seeds []string, consumerGroup string, topics []string, opts ...Cl
 			cancelProcessing.cancel()
 			cfg.onRebalanceBlocked()
 		}),
+		kgo.WithHooks(kOTelService.Hooks()...),
 	}
 	kgoOpts = append(kgoOpts, cfg.toKgoOpts()...)
 

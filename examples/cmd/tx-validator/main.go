@@ -16,6 +16,7 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/idempotent"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/mat-sik/saga-go/examples/internal/migrations"
+	"github.com/mat-sik/saga-go/examples/internal/otelinit"
 )
 
 func main() {
@@ -30,6 +31,20 @@ func run() int {
 	if err != nil {
 		slog.Error("reading tx-validator config", "err", err)
 		return 1
+	}
+
+	if conf.OTelCollectorHost != "" {
+		var shutdown otelinit.ShutdownFunc
+		shutdown, err = otelinit.InitOTelSDK(ctx, conf.OTelCollectorHost, conf.OTelServiceName)
+		if err != nil {
+			slog.Error("initializing OTel SDK", "err", err)
+			return 1
+		}
+		defer func() {
+			if err = shutdown(context.Background()); err != nil {
+				slog.Error("shutting down OTel SDK", "err", err)
+			}
+		}()
 	}
 
 	pool, err := pgxpool.New(ctx, conf.DatabaseURL)

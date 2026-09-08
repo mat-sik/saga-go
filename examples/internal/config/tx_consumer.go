@@ -8,6 +8,8 @@ import (
 )
 
 type TxConsumer struct {
+	OTelCollectorHost              string   `env:"TX_CONSUMER_OTEL_COLLECTOR_HOST"`
+	OTelServiceName                string   `env:"TX_CONSUMER_OTEL_SERVICE_NAME, default=tx-consumer"`
 	DatabaseURL                    string   `env:"TX_CONSUMER_DATABASE_URL"`
 	KafkaSeeds                     []string `env:"TX_CONSUMER_KAFKA_SEEDS"`
 	TransactionsTopic              string   `env:"TX_CONSUMER_KAFKA_TRANSACTIONS_TOPIC"`

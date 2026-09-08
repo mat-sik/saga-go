@@ -8,6 +8,8 @@ import (
 )
 
 type MailSender struct {
+	OTelCollectorHost        string   `env:"MAIL_SENDER_OTEL_COLLECTOR_HOST"`
+	OTelServiceName          string   `env:"MAIL_SENDER_OTEL_SERVICE_NAME, default=mail-sender"`
 	DatabaseURL              string   `env:"MAIL_SENDER_DATABASE_URL"`
 	KafkaSeeds               []string `env:"MAIL_SENDER_KAFKA_SEEDS"`
 	AlarmsTopic              string   `env:"MAIL_SENDER_KAFKA_ALARMS_TOPIC"`

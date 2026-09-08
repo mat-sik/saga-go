@@ -15,6 +15,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/kafka"
 	"github.com/mat-sik/saga-go/examples/internal/config"
+	"github.com/mat-sik/saga-go/examples/internal/kotelinit"
+	"github.com/mat-sik/saga-go/examples/internal/otelinit"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -32,8 +34,25 @@ func run() int {
 		return 1
 	}
 
+	if conf.OTelCollectorHost != "" {
+		var shutdown otelinit.ShutdownFunc
+		shutdown, err = otelinit.InitOTelSDK(ctx, conf.OTelCollectorHost, conf.OTelServiceName)
+		if err != nil {
+			slog.Error("initializing OTel SDK", "err", err)
+			return 1
+		}
+		defer func() {
+			if err = shutdown(context.Background()); err != nil {
+				slog.Error("shutting down OTel SDK", "err", err)
+			}
+		}()
+	}
+
+	kOTelService := kotelinit.NewKOTel()
+
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(conf.KafkaSeeds...),
+		kgo.WithHooks(kOTelService.Hooks()...),
 	}
 
 	client, err := kgo.NewClient(opts...)

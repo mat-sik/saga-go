@@ -8,6 +8,8 @@ import (
 )
 
 type TxProducer struct {
+	OTelCollectorHost   string   `env:"TX_PRODUCER_OTEL_COLLECTOR_HOST"`
+	OTelServiceName     string   `env:"TX_PRODUCER_OTEL_SERVICE_NAME, default=tx-producer"`
 	KafkaSeeds          []string `env:"TX_PRODUCER_KAFKA_SEEDS"`
 	TransactionsTopic   string   `env:"TX_PRODUCER_KAFKA_TRANSACTIONS_TOPIC"`
 	ProduceAmount       int      `env:"TX_PRODUCER_PRODUCE_AMOUNT"`
