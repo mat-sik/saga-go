@@ -22,20 +22,16 @@ func Run(ctx context.Context, consumerCount int, newConsumer func() (Consumer, e
 				return
 			}
 			defer consumer.Close()
-			if err = consumer.StartPolling(ctx); err != nil {
-				errCh <- fmt.Errorf("polling: %w", err)
-				return
-			}
-			errCh <- nil
+			err = consumer.StartPolling(ctx)
+			errCh <- fmt.Errorf("polling: %w", err)
 		})
 	}
 
 	var errs []error
 	for range consumerCount {
-		if err := <-errCh; err != nil {
-			cancel()
-			errs = append(errs, err)
-		}
+		err := <-errCh
+		cancel()
+		errs = append(errs, err)
 	}
 
 	return errors.Join(errs...)

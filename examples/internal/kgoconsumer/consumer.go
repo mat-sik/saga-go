@@ -177,10 +177,7 @@ func (c Consumer) fetchesFatalError(fetches kgo.Fetches) error {
 
 func isFatalFetchErr(err error) bool {
 	var dataLoss *kgo.ErrDataLoss
-	if errors.As(err, &dataLoss) {
-		return false
-	}
-	return true
+	return !errors.As(err, &dataLoss)
 }
 
 func (c Consumer) newBatchConsumer() batchConsumer {
