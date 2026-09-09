@@ -95,7 +95,8 @@ func newTxSagaConsumer(conf config.TxConsumer, pool *pgxpool.Pool) (kgoconsumer.
 
 	txAction := sagaadapters.NewTxAction(logAction, aggregateAction)
 
-	countAction := count.NewSagaAction[sagaadapters.RegisterSagaCommand, sagaadapters.UnregisterSagaCommand](postgres.NewCountRepository())
+	counter := count.NewCounter(postgres.NewCountRepository())
+	countAction := sagaadapters.NewCountAction[sagaadapters.RegisterSagaCommand, sagaadapters.UnregisterSagaCommand](counter)
 
 	actions := []saga.Action[sagaadapters.RegisterSagaCommand, sagaadapters.UnregisterSagaCommand]{
 		txAction,
