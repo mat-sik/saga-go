@@ -18,7 +18,8 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/domain/alarm"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/mat-sik/saga-go/examples/internal/migrations"
-	"github.com/mat-sik/saga-go/examples/internal/otelinit"
+	"github.com/mat-sik/saga-go/examples/internal/otel/oteldecorator"
+	"github.com/mat-sik/saga-go/examples/internal/otel/otelinit"
 	"github.com/mat-sik/saga-go/saga"
 )
 
@@ -84,24 +85,29 @@ func newAlarmSagaConsumer(conf config.MailSender, pool *pgxpool.Pool) (kgoconsum
 		return kgoconsumer.Consumer{}, err
 	}
 
+	tracer := otelinit.NewTracer()
+
 	var auth smtp.Auth
 	if !isDev(conf) {
 		auth = smtp.PlainAuth("", conf.SMTPUsername, conf.SMTPPassword, conf.SMTPHost)
 	}
+
 	mailSender := mail.NewAlarmMailSender(auth, conf.SMTPAddr(), conf.MailFrom, conf.MailTo)
 	alarmRaiser := alarm.NewAlarmRaiser(mailSender)
+	tracedAlarmRaiser := oteldecorator.NewTracedAlarmRaiser(alarmRaiser, tracer)
+	alarmSagaAction := sagaadapters.NewAlarmSagaAction(tracedAlarmRaiser)
 
-	actions := []saga.Action[sagaadapters.RaiseAlarmSagaCommand, sagaadapters.ClearAlarmSagaCommand]{
-		sagaadapters.NewAlarmAction(alarmRaiser),
+	sagaActions := []saga.Action[sagaadapters.RaiseAlarmSagaCommand, sagaadapters.ClearAlarmSagaCommand]{
+		oteldecorator.NewTracedAlarmSagaAction(alarmSagaAction, tracer),
 	}
 
-	sagaConsumer := saga.NewConsumer(actions, postgres.NewAlarmConsumerRepository())
+	sagaConsumer := saga.NewConsumer(sagaActions, postgres.NewAlarmConsumerRepository())
 
 	txRunner := func(ctx context.Context, fn func(context.Context) error) error {
 		return postgres.WithTx(ctx, pool, fn)
 	}
 
-	return kafka.NewAlarmSagaConsumer(kafkaClient, txRunner, conf.AlarmsDLQTopic, sagaConsumer)
+	return kafka.NewAlarmSagaConsumer(kafkaClient, txRunner, conf.AlarmsDLQTopic, sagaConsumer, kgoconsumer.WithTracer(tracer))
 }
 
 func isDev(conf config.MailSender) bool {

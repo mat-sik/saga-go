@@ -11,12 +11,14 @@ type ValidatorPortOut interface {
 }
 
 type Validator struct {
-	portOut ValidatorPortOut
+	portOut  ValidatorPortOut
+	observer ValidatorObserver
 }
 
-func NewValidator(portOut ValidatorPortOut) Validator {
+func NewValidator(portOut ValidatorPortOut, observer ValidatorObserver) Validator {
 	return Validator{
-		portOut: portOut,
+		portOut:  portOut,
+		observer: observer,
 	}
 }
 
@@ -30,8 +32,20 @@ func (v Validator) ValidateAndCompensate(ctx context.Context, registerCommand Re
 		return nil
 	}
 
+	v.observer.Observe(ctx, ValidatorEventValidationUnsuccessful)
+
 	if err = v.portOut.Unregister(ctx, registerCommand); err != nil {
 		return fmt.Errorf("compensating %v: %w", registerCommand, err)
 	}
 	return nil
 }
+
+type ValidatorObserver interface {
+	Observe(context.Context, ValidatorEvent)
+}
+
+type ValidatorEvent int
+
+const (
+	ValidatorEventValidationUnsuccessful ValidatorEvent = iota
+)

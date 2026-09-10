@@ -16,7 +16,9 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/idempotent"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/mat-sik/saga-go/examples/internal/migrations"
-	"github.com/mat-sik/saga-go/examples/internal/otelinit"
+	"github.com/mat-sik/saga-go/examples/internal/otel/oteldecorator"
+	"github.com/mat-sik/saga-go/examples/internal/otel/otelinit"
+	"github.com/mat-sik/saga-go/examples/internal/otel/otelobserver"
 )
 
 func main() {
@@ -81,10 +83,13 @@ func newTxConsumer(conf config.TxValidator, pool *pgxpool.Pool) (kgoconsumer.Con
 		return kgoconsumer.Consumer{}, err
 	}
 
-	validator := tx.NewValidator(kafka.NewRandomValidator(kafkaClient.ToKgo(), conf.TransactionsTopic, conf.CompensatePercent))
+	tracer := otelinit.NewTracer()
+
+	validator := tx.NewValidator(kafka.NewRandomValidator(kafkaClient.ToKgo(), conf.TransactionsTopic, conf.CompensatePercent), otelobserver.NewValidatorObserver())
+	tracedValidator := oteldecorator.NewTracedTxValidator(validator, tracer)
 
 	recordConsumers := []func(context.Context, tx.RegisterCommand) error{
-		validator.ValidateAndCompensate,
+		tracedValidator.ValidateAndCompensate,
 	}
 
 	idempotentConsumer := idempotent.NewConsumer(recordConsumers, postgres.NewTxConsumerRepository())
@@ -93,5 +98,5 @@ func newTxConsumer(conf config.TxValidator, pool *pgxpool.Pool) (kgoconsumer.Con
 		return postgres.WithTx(ctx, pool, fn)
 	}
 
-	return kafka.NewTxConsumer(kafkaClient, txRunner, conf.TransactionsDLQTopic, idempotentConsumer)
+	return kafka.NewTxConsumer(kafkaClient, txRunner, conf.TransactionsDLQTopic, idempotentConsumer, kgoconsumer.WithTracer(tracer))
 }

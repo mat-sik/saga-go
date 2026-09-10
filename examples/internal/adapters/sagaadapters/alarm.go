@@ -30,20 +30,20 @@ func (c ClearAlarmSagaCommand) ToCompensatingTransaction() (ClearAlarmSagaComman
 	return c, true
 }
 
-type AlarmAction struct {
+type AlarmSagaAction struct {
 	alarmRaiser alarm.Raiser
 }
 
-func NewAlarmAction(alarmRaiser alarm.Raiser) AlarmAction {
-	return AlarmAction{
+func NewAlarmSagaAction(alarmRaiser alarm.Raiser) AlarmSagaAction {
+	return AlarmSagaAction{
 		alarmRaiser: alarmRaiser,
 	}
 }
 
-func (a AlarmAction) Execute(ctx context.Context, sagaCmd RaiseAlarmSagaCommand) error {
+func (a AlarmSagaAction) Execute(ctx context.Context, sagaCmd RaiseAlarmSagaCommand) error {
 	return a.alarmRaiser.RaiseAlarm(ctx, sagaCmd.RaiseAlarmCommand)
 }
 
-func (a AlarmAction) Compensate(ctx context.Context, sagaCmd ClearAlarmSagaCommand) error {
+func (a AlarmSagaAction) Compensate(ctx context.Context, sagaCmd ClearAlarmSagaCommand) error {
 	return a.alarmRaiser.ClearAlarm(ctx, sagaCmd.ClearAlarmCommand)
 }

@@ -15,8 +15,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/kafka"
 	"github.com/mat-sik/saga-go/examples/internal/config"
-	"github.com/mat-sik/saga-go/examples/internal/kotelinit"
-	"github.com/mat-sik/saga-go/examples/internal/otelinit"
+	"github.com/mat-sik/saga-go/examples/internal/otel/kotelinit"
+	"github.com/mat-sik/saga-go/examples/internal/otel/otelinit"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 

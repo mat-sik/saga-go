@@ -11,24 +11,29 @@ type LogPortOut interface {
 	InsertCompensatingLog(ctx context.Context, transactionID string, compensatedTransactionID string, createdAt time.Time) error
 }
 
-type Log struct {
+type Log interface {
+	Register(ctx context.Context, registerCommand RegisterCommand) error
+	Unregister(ctx context.Context, unregisterCommand UnregisterCommand) error
+}
+
+type log struct {
 	portOut LogPortOut
 }
 
 func NewLog(portOut LogPortOut) Log {
-	return Log{
+	return log{
 		portOut: portOut,
 	}
 }
 
-func (l Log) Register(ctx context.Context, registerCommand RegisterCommand) error {
+func (l log) Register(ctx context.Context, registerCommand RegisterCommand) error {
 	if err := l.portOut.InsertLog(ctx, registerCommand); err != nil {
 		return fmt.Errorf("inserting log: %w", err)
 	}
 	return nil
 }
 
-func (l Log) Unregister(ctx context.Context, unregisterCommand UnregisterCommand) error {
+func (l log) Unregister(ctx context.Context, unregisterCommand UnregisterCommand) error {
 	if err := l.portOut.InsertCompensatingLog(
 		ctx,
 		unregisterCommand.ID,

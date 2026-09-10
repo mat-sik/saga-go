@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/mat-sik/saga-go/examples/internal/kotelinit"
+	"github.com/mat-sik/saga-go/examples/internal/otel/kotelinit"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Client struct {
@@ -65,12 +68,13 @@ func NewConsumer(
 	recordConsumer RecordConsumer,
 	options ...Option,
 ) (Consumer, error) {
+	cfg := newConfig(options...)
 	return Consumer{
 		client:           kafkaClient.kgoClient,
-		dlqProducer:      newDlqProducer(kafkaClient.kgoClient, dlqTopic),
+		dlqProducer:      newDlqProducer(kafkaClient.kgoClient, dlqTopic, cfg.tracer),
 		cancelProcessing: kafkaClient.cancelProcessing,
 		recordConsumer:   recordConsumer,
-		config:           newConfig(options...),
+		config:           cfg,
 	}, nil
 }
 
@@ -190,6 +194,7 @@ func (c Consumer) newBatchConsumer() batchConsumer {
 		dlqProducer:                  c.dlqProducer,
 		processedEpochOffsetsTracker: newProcessedOffsetsTracker(),
 		backoff:                      c.newBackoff(),
+		tracer:                       c.config.tracer,
 	}
 }
 
@@ -215,6 +220,7 @@ type batchConsumer struct {
 	dlqProducer                  *dlqProducer
 	processedEpochOffsetsTracker *processedEpochOffsetsTracker
 	backoff                      *backoff
+	tracer                       trace.Tracer
 }
 
 func (bc batchConsumer) consumeFetches(ctx context.Context, fetches kgo.Fetches) (err error) {
@@ -241,28 +247,57 @@ func (bc batchConsumer) consumeFetches(ctx context.Context, fetches kgo.Fetches)
 	return nil
 }
 
-func (bc batchConsumer) consumeWithRetry(ctx context.Context, record *kgo.Record, errs []error) ([]error, error) {
+func (bc batchConsumer) consumeWithRetry(ctx context.Context, record *kgo.Record, errs []error) (_ []error, err error) {
+	const (
+		spanName         = "record.consume"
+		cancelledErrDesc = "consume cancelled"
+		permanentErrDesc = "consume failed permanently"
+	)
+
+	ctx = contextWithParentSpanContext(ctx, record)
+	ctx, span := bc.tracer.Start(ctx, spanName)
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, cancelledErrDesc)
+		}
+		span.End()
+	}()
+
 	for {
-		if err := ctx.Err(); err != nil {
+		if err = ctx.Err(); err != nil {
 			return errs, fmt.Errorf("consuming fetches: %w", err)
 		}
 
-		err := bc.recordConsumer(ctx, record)
+		err = bc.recordConsumer(ctx, record)
 		switch {
 		case err == nil:
 			bc.backoff.clear()
 			bc.processedEpochOffsetsTracker.registerAsProcessed(record)
 			return errs, nil
 		case errors.Is(err, ErrTransient):
+			span.AddEvent("transient error", trace.WithAttributes(attribute.String("error", err.Error())))
+
 			errs = append(errs, err)
 			if err = bc.backoff.wait(ctx); err != nil {
 				return errs, err
 			}
 		default:
+			span.RecordError(err)
+			span.SetStatus(codes.Error, permanentErrDesc)
+
 			bc.dlqProducer.produce(ctx, failedRecord{record: record, cause: err})
 			return append(errs, err), nil
 		}
 	}
+}
+
+func contextWithParentSpanContext(ctx context.Context, record *kgo.Record) context.Context {
+	parentSpan := trace.SpanContextFromContext(record.Context)
+	if parentSpan.IsValid() {
+		ctx = trace.ContextWithSpanContext(ctx, parentSpan)
+	}
+	return ctx
 }
 
 type RecordConsumer func(ctx context.Context, record *kgo.Record) error

@@ -4,11 +4,14 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type config struct {
 	backoffConfig    backoffConfig
 	processingConfig processingConfig
+	tracer           trace.Tracer
 }
 
 func newConfig(opts ...Option) config {
@@ -29,6 +32,7 @@ func newDefaultConfig() config {
 		processingConfig: processingConfig{
 			timeout: 5 * time.Minute,
 		},
+		tracer: otel.Tracer(""),
 	}
 }
 
@@ -65,6 +69,12 @@ type processingConfig struct {
 func WithProcessingTimeout(timeout time.Duration) Option {
 	return func(c *config) {
 		c.processingConfig.timeout = timeout
+	}
+}
+
+func WithTracer(tracer trace.Tracer) Option {
+	return func(c *config) {
+		c.tracer = tracer
 	}
 }
 
