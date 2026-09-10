@@ -13,25 +13,25 @@ type AggregatePortOut interface {
 	Subtract(ctx context.Context, id RegisterID, value int) (int, error)
 }
 
-type AggregateSagaAction struct {
+type Aggregate struct {
 	portOut            AggregatePortOut
 	alarmValueProvider alarm.ValueProvider
 	alarmRaiser        alarm.Raiser
 }
 
-func NewAggregateSagaAction(
+func NewAggregate(
 	portOut AggregatePortOut,
 	alarmValueProvider alarm.ValueProvider,
 	alarmRaiser alarm.Raiser,
-) AggregateSagaAction {
-	return AggregateSagaAction{
+) Aggregate {
+	return Aggregate{
 		portOut:            portOut,
 		alarmValueProvider: alarmValueProvider,
 		alarmRaiser:        alarmRaiser,
 	}
 }
 
-func (a AggregateSagaAction) Register(ctx context.Context, cmd RegisterCommand) error {
+func (a Aggregate) Register(ctx context.Context, cmd RegisterCommand) error {
 	updatedValue, err := a.portOut.Upsert(ctx, cmd.RegisterID, cmd.Value)
 	if err != nil {
 		return fmt.Errorf("upserting tx: %w", err)
@@ -44,7 +44,7 @@ func (a AggregateSagaAction) Register(ctx context.Context, cmd RegisterCommand) 
 	return nil
 }
 
-func (a AggregateSagaAction) Unregister(ctx context.Context, cmd UnregisterCommand) error {
+func (a Aggregate) Unregister(ctx context.Context, cmd UnregisterCommand) error {
 	regCmd := cmd.RegisterCommand
 	updatedValue, err := a.portOut.Subtract(ctx, regCmd.RegisterID, regCmd.Value)
 	if err != nil {
@@ -58,7 +58,7 @@ func (a AggregateSagaAction) Unregister(ctx context.Context, cmd UnregisterComma
 	return nil
 }
 
-func (a AggregateSagaAction) updateAlarmState(ctx context.Context, playerID string, deltaValue, updatedValue int) error {
+func (a Aggregate) updateAlarmState(ctx context.Context, playerID string, deltaValue, updatedValue int) error {
 	alarmValue, err := a.alarmValueProvider.Provide(ctx, playerID)
 	if err != nil {
 		return err

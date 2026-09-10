@@ -31,11 +31,11 @@ func (u UnregisterSagaCommand) ToCompensatingTransaction() (UnregisterSagaComman
 }
 
 type TxAction struct {
-	logSagaAction       tx.LogSagaAction
-	aggregateSagaAction tx.AggregateSagaAction
+	logSagaAction       tx.Log
+	aggregateSagaAction tx.Aggregate
 }
 
-func NewTxAction(logSagaAction tx.LogSagaAction, aggregateSagaAction tx.AggregateSagaAction) TxAction {
+func NewTxAction(logSagaAction tx.Log, aggregateSagaAction tx.Aggregate) TxAction {
 	return TxAction{
 		logSagaAction:       logSagaAction,
 		aggregateSagaAction: aggregateSagaAction,

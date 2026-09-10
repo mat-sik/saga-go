@@ -89,9 +89,9 @@ func newTxSagaConsumer(conf config.TxConsumer, pool *pgxpool.Pool) (kgoconsumer.
 	alarmValueProvider := alarm.NewAlarmValueProvider(static.NewAlarmValueProvider(conf.AlarmValue))
 	alarmRaiser := alarm.NewAlarmRaiser(kafka.NewAlarmProducer(kafkaClient.ToKgo(), conf.AlarmTopic))
 
-	aggregateAction := tx.NewAggregateSagaAction(aggregateRepository, alarmValueProvider, alarmRaiser)
+	aggregateAction := tx.NewAggregate(aggregateRepository, alarmValueProvider, alarmRaiser)
 
-	logAction := tx.NewLogSagaAction(postgres.NewLogRepository())
+	logAction := tx.NewLog(postgres.NewLogRepository())
 
 	txAction := sagaadapters.NewTxAction(logAction, aggregateAction)
 
