@@ -8,12 +8,15 @@ services:
       kafka-topics-init:
         condition: service_completed_successfully
     environment:
+      TX_PRODUCER_OTEL_COLLECTOR_HOST: otel-lgtm:4317
+      TX_PRODUCER_OTEL_SERVICE_NAME: tx-producer
       TX_PRODUCER_KAFKA_SEEDS: kafka-broker:9092
       TX_PRODUCER_KAFKA_TRANSACTIONS_TOPIC: transactions
       TX_PRODUCER_PRODUCE_AMOUNT: 1000
+      TX_PRODUCER_PRODUCE_POISON_PILL_AMOUNT: 5
       TX_PRODUCER_GENERATOR_CURRENCIES: EUR,USD,PLN
       TX_PRODUCER_GENERATOR_PLAYER_ID_AMOUNT: 10
-      TX_PRODUCER_GENERATOR_TRANSACTION_ID_AMOUNT: 10
+      TX_PRODUCER_GENERATOR_TRANSACTION_ID_AMOUNT: 10000
       TX_PRODUCER_GENERATOR_DAYS_AMOUNT: 10
       TX_PRODUCER_GENERATOR_MAX_VALUE: 100
 
@@ -28,6 +31,8 @@ services:
       kafka-topics-init:
         condition: service_completed_successfully
     environment:
+      TX_CONSUMER_OTEL_COLLECTOR_HOST: otel-lgtm:4317
+      TX_CONSUMER_OTEL_SERVICE_NAME: tx-consumer
       TX_CONSUMER_DATABASE_URL: postgres://tx-consumer:tx-consumer@tx-consumer-db:5432/tx-consumer
       TX_CONSUMER_KAFKA_SEEDS: kafka-broker:9092
       TX_CONSUMER_KAFKA_TRANSACTIONS_TOPIC: transactions
@@ -67,13 +72,15 @@ services:
       kafka-topics-init:
         condition: service_completed_successfully
     environment:
+      TX_VALIDATOR_OTEL_COLLECTOR_HOST: otel-lgtm:4317
+      TX_VALIDATOR_OTEL_SERVICE_NAME: tx-validator
       TX_VALIDATOR_DATABASE_URL: postgres://tx-validator:tx-validator@tx-validator-db:5432/tx-validator
       TX_VALIDATOR_KAFKA_SEEDS: kafka-broker:9092
       TX_VALIDATOR_KAFKA_TRANSACTIONS_TOPIC: transactions
       TX_VALIDATOR_KAFKA_TRANSACTIONS_DLQ_TOPIC: transactions-dlq
       TX_VALIDATOR_KAFKA_TRANSACTIONS_TOPIC_CONSUMER_GROUP: tx-validator
       TX_VALIDATOR_KAFKA_CONSUMER_COUNT: 5
-      TX_VALIDATOR_KAFKA_COMPENSATE_PERCENT: 90
+      TX_VALIDATOR_KAFKA_COMPENSATE_PERCENT: 50
 
   tx-validator-db:
     image: postgres:18.4-alpine
@@ -107,6 +114,8 @@ services:
       mailhog:
         condition: service_started
     environment:
+      MAIL_SENDER_OTEL_COLLECTOR_HOST: otel-lgtm:4317
+      MAIL_SENDER_OTEL_SERVICE_NAME: mail-sender
       MAIL_SENDER_DATABASE_URL: postgres://mail-sender:mail-sender@mail-sender-db:5432/mail-sender
       MAIL_SENDER_KAFKA_SEEDS: kafka-broker:9092
       MAIL_SENDER_KAFKA_ALARMS_TOPIC: alarms
@@ -147,6 +156,15 @@ services:
     ports:
       - '1025:1025'
       - '8025:8025'
+
+  otel-lgtm:
+    image: grafana/otel-lgtm
+    restart: on-failure
+    networks:
+      - net
+    ports:
+      - '3000:3000'
+      - '4317:4317'
 
   kafka-topics-init:
     image: apache/kafka:4.3.1

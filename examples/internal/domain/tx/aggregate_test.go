@@ -12,7 +12,7 @@ type testCmd struct {
 	unregister *UnregisterCommand
 }
 
-func TestAggregateSagaAction(t *testing.T) {
+func TestAggregate(t *testing.T) {
 	tests := []struct {
 		name      string
 		initState initState
@@ -111,18 +111,19 @@ func TestAggregateSagaAction(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			aggregatePortOut, alarmValueProviderPortOut, alarmRaiserPortOut := writeInitState(tt.initState)
 
-			aggregateSagaAction := NewAggregateSagaAction(
+			aggr := NewAggregate(
 				&aggregatePortOut,
 				alarm.NewAlarmValueProvider(alarmValueProviderPortOut),
 				alarm.NewAlarmRaiser(&alarmRaiserPortOut),
+				newMockAggregateObserver(),
 			)
 
 			for _, cmd := range tt.cmd {
 				switch {
 				case cmd.register != nil:
-					_ = aggregateSagaAction.Register(context.Background(), *cmd.register)
+					_ = aggr.Register(context.Background(), *cmd.register)
 				case cmd.unregister != nil:
-					_ = aggregateSagaAction.Unregister(context.Background(), *cmd.unregister)
+					_ = aggr.Unregister(context.Background(), *cmd.unregister)
 				default:
 					t.Fatalf("unsupported cmd: %v", cmd)
 				}
@@ -208,4 +209,14 @@ type testAlarmValueProviderPortOut struct {
 
 func (t testAlarmValueProviderPortOut) AlarmValue(context.Context, string) (int, error) {
 	return t.threshold, nil
+}
+
+type mockAggregateObserver struct {
+}
+
+func newMockAggregateObserver() mockAggregateObserver {
+	return mockAggregateObserver{}
+}
+
+func (m mockAggregateObserver) Observe(_ context.Context, _ AggregateEvent) {
 }

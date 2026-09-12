@@ -16,6 +16,9 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/idempotent"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/mat-sik/saga-go/examples/internal/migrations"
+	"github.com/mat-sik/saga-go/examples/internal/otel/oteldecorator"
+	"github.com/mat-sik/saga-go/examples/internal/otel/otelinit"
+	"github.com/mat-sik/saga-go/examples/internal/otel/otelobserver"
 )
 
 func main() {
@@ -30,6 +33,20 @@ func run() int {
 	if err != nil {
 		slog.Error("reading tx-validator config", "err", err)
 		return 1
+	}
+
+	if conf.OTelCollectorHost != "" {
+		var shutdown otelinit.ShutdownFunc
+		shutdown, err = otelinit.InitOTelSDK(ctx, conf.OTelCollectorHost, conf.OTelServiceName)
+		if err != nil {
+			slog.Error("initializing OTel SDK", "err", err)
+			return 1
+		}
+		defer func() {
+			if err = shutdown(context.Background()); err != nil {
+				slog.Error("shutting down OTel SDK", "err", err)
+			}
+		}()
 	}
 
 	pool, err := pgxpool.New(ctx, conf.DatabaseURL)
@@ -66,17 +83,21 @@ func newTxConsumer(conf config.TxValidator, pool *pgxpool.Pool) (kgoconsumer.Con
 		return kgoconsumer.Consumer{}, err
 	}
 
-	validator := tx.NewValidator(kafka.NewRandomValidator(kafkaClient.ToKgo(), conf.TransactionsTopic, conf.CompensatePercent))
+	tracer := otelinit.NewTracer()
+
+	validator := tx.NewValidator(kafka.NewRandomValidator(kafkaClient.ToKgo(), conf.TransactionsTopic, conf.CompensatePercent), otelobserver.NewValidatorObserver())
+	tracedValidator := oteldecorator.NewTracedTxValidator(validator, tracer)
 
 	recordConsumers := []func(context.Context, tx.RegisterCommand) error{
-		validator.ValidateAndCompensate,
+		tracedValidator.ValidateAndCompensate,
 	}
 
-	idempotentConsumer := idempotent.NewConsumer(recordConsumers, postgres.NewTxConsumerRepository())
+	idempotentConsumer := idempotent.NewConsumer(recordConsumers, postgres.NewTxConsumerRepository(), otelobserver.NewIdempotentConsumerObserver())
+	tracedIdempotentConsumer := oteldecorator.NewTracedIdempotentConsumer(idempotentConsumer, tracer)
 
 	txRunner := func(ctx context.Context, fn func(context.Context) error) error {
 		return postgres.WithTx(ctx, pool, fn)
 	}
 
-	return kafka.NewTxConsumer(kafkaClient, txRunner, conf.TransactionsDLQTopic, idempotentConsumer)
+	return kafka.NewTxConsumer(kafkaClient, txRunner, conf.TransactionsDLQTopic, tracedIdempotentConsumer, kgoconsumer.WithTracer(tracer))
 }

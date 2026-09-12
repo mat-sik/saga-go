@@ -30,33 +30,33 @@ func (u UnregisterSagaCommand) ToCompensatingTransaction() (UnregisterSagaComman
 	return u, true
 }
 
-type TxAction struct {
-	logSagaAction       tx.LogSagaAction
-	aggregateSagaAction tx.AggregateSagaAction
+type TxSagaAction struct {
+	log       tx.Log
+	aggregate tx.Aggregate
 }
 
-func NewTxAction(logSagaAction tx.LogSagaAction, aggregateSagaAction tx.AggregateSagaAction) TxAction {
-	return TxAction{
-		logSagaAction:       logSagaAction,
-		aggregateSagaAction: aggregateSagaAction,
+func NewTxSagaAction(log tx.Log, aggregate tx.Aggregate) TxSagaAction {
+	return TxSagaAction{
+		log:       log,
+		aggregate: aggregate,
 	}
 }
 
-func (a TxAction) Execute(ctx context.Context, cmd RegisterSagaCommand) error {
-	if err := a.aggregateSagaAction.Register(ctx, cmd.RegisterCommand); err != nil {
+func (a TxSagaAction) Execute(ctx context.Context, cmd RegisterSagaCommand) error {
+	if err := a.aggregate.Register(ctx, cmd.RegisterCommand); err != nil {
 		return err
 	}
-	if err := a.logSagaAction.Register(ctx, cmd.RegisterCommand); err != nil {
+	if err := a.log.Register(ctx, cmd.RegisterCommand); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (a TxAction) Compensate(ctx context.Context, cmd UnregisterSagaCommand) error {
-	if err := a.aggregateSagaAction.Unregister(ctx, cmd.UnregisterCommand); err != nil {
+func (a TxSagaAction) Compensate(ctx context.Context, cmd UnregisterSagaCommand) error {
+	if err := a.aggregate.Unregister(ctx, cmd.UnregisterCommand); err != nil {
 		return err
 	}
-	if err := a.logSagaAction.Unregister(ctx, cmd.UnregisterCommand); err != nil {
+	if err := a.log.Unregister(ctx, cmd.UnregisterCommand); err != nil {
 		return err
 	}
 	return nil

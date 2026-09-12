@@ -10,16 +10,21 @@ type RaiserPortOut interface {
 	ClearAlarm(ctx context.Context, clearAlarmCommand ClearAlarmCommand) error
 }
 
-type Raiser struct {
+type Raiser interface {
+	RaiseAlarm(ctx context.Context, cmd RaiseAlarmCommand) error
+	ClearAlarm(ctx context.Context, cmd ClearAlarmCommand) error
+}
+
+type raiser struct {
 	portOut RaiserPortOut
 }
 
 func NewAlarmRaiser(portOut RaiserPortOut) Raiser {
-	return Raiser{portOut: portOut}
+	return raiser{portOut: portOut}
 }
 
-func (ar Raiser) RaiseAlarm(ctx context.Context, cmd RaiseAlarmCommand) error {
-	if err := ar.portOut.RaiseAlarm(ctx, cmd); err != nil {
+func (r raiser) RaiseAlarm(ctx context.Context, cmd RaiseAlarmCommand) error {
+	if err := r.portOut.RaiseAlarm(ctx, cmd); err != nil {
 		return fmt.Errorf("raising alarm of player %s %d/%d: %w", cmd.PlayerID, cmd.Value, cmd.AlarmValue, err)
 	}
 	return nil
@@ -41,8 +46,8 @@ func NewRaiseAlarmCommand(id string, playerID string, alarmValue, value int) Rai
 	}
 }
 
-func (ar Raiser) ClearAlarm(ctx context.Context, cmd ClearAlarmCommand) error {
-	if err := ar.portOut.ClearAlarm(ctx, cmd); err != nil {
+func (r raiser) ClearAlarm(ctx context.Context, cmd ClearAlarmCommand) error {
+	if err := r.portOut.ClearAlarm(ctx, cmd); err != nil {
 		return fmt.Errorf("clearing alarm of player %s: %w", cmd.PlayerID, err)
 	}
 	return nil

@@ -13,25 +13,33 @@ type AggregatePortOut interface {
 	Subtract(ctx context.Context, id RegisterID, value int) (int, error)
 }
 
-type AggregateSagaAction struct {
+type Aggregate interface {
+	Register(ctx context.Context, cmd RegisterCommand) error
+	Unregister(ctx context.Context, cmd UnregisterCommand) error
+}
+
+type aggregate struct {
 	portOut            AggregatePortOut
 	alarmValueProvider alarm.ValueProvider
 	alarmRaiser        alarm.Raiser
+	observer           AggregateObserver
 }
 
-func NewAggregateSagaAction(
+func NewAggregate(
 	portOut AggregatePortOut,
 	alarmValueProvider alarm.ValueProvider,
 	alarmRaiser alarm.Raiser,
-) AggregateSagaAction {
-	return AggregateSagaAction{
+	observer AggregateObserver,
+) Aggregate {
+	return aggregate{
 		portOut:            portOut,
 		alarmValueProvider: alarmValueProvider,
 		alarmRaiser:        alarmRaiser,
+		observer:           observer,
 	}
 }
 
-func (a AggregateSagaAction) Register(ctx context.Context, cmd RegisterCommand) error {
+func (a aggregate) Register(ctx context.Context, cmd RegisterCommand) error {
 	updatedValue, err := a.portOut.Upsert(ctx, cmd.RegisterID, cmd.Value)
 	if err != nil {
 		return fmt.Errorf("upserting tx: %w", err)
@@ -44,7 +52,7 @@ func (a AggregateSagaAction) Register(ctx context.Context, cmd RegisterCommand) 
 	return nil
 }
 
-func (a AggregateSagaAction) Unregister(ctx context.Context, cmd UnregisterCommand) error {
+func (a aggregate) Unregister(ctx context.Context, cmd UnregisterCommand) error {
 	regCmd := cmd.RegisterCommand
 	updatedValue, err := a.portOut.Subtract(ctx, regCmd.RegisterID, regCmd.Value)
 	if err != nil {
@@ -58,7 +66,7 @@ func (a AggregateSagaAction) Unregister(ctx context.Context, cmd UnregisterComma
 	return nil
 }
 
-func (a AggregateSagaAction) updateAlarmState(ctx context.Context, playerID string, deltaValue, updatedValue int) error {
+func (a aggregate) updateAlarmState(ctx context.Context, playerID string, deltaValue, updatedValue int) error {
 	alarmValue, err := a.alarmValueProvider.Provide(ctx, playerID)
 	if err != nil {
 		return err
@@ -71,14 +79,32 @@ func (a AggregateSagaAction) updateAlarmState(ctx context.Context, playerID stri
 		if err != nil {
 			return fmt.Errorf("generating raise alarm UUIDv7: %w", err)
 		}
+		a.observer.Observe(ctx, AggregateRaiseAlarmEvent{
+			PreviousValue: previousValue,
+			DeltaValue:    deltaValue,
+			CurrentValue:  updatedValue,
+			AlarmValue:    alarmValue,
+		})
 		return a.alarmRaiser.RaiseAlarm(ctx, alarm.NewRaiseAlarmCommand(id.String(), playerID, alarmValue, updatedValue))
 	case crossedBelow:
 		id, err := uuid.NewV7()
 		if err != nil {
 			return fmt.Errorf("generating clear alarm UUIDv7: %w", err)
 		}
+		a.observer.Observe(ctx, AggregateClearAlarmEvent{
+			PreviousValue: previousValue,
+			DeltaValue:    deltaValue,
+			CurrentValue:  updatedValue,
+			AlarmValue:    alarmValue,
+		})
 		return a.alarmRaiser.ClearAlarm(ctx, alarm.NewClearAlarmCommand(id.String(), playerID))
 	default:
+		a.observer.Observe(ctx, AggregateNoCrossingEvent{
+			PreviousValue: previousValue,
+			DeltaValue:    deltaValue,
+			CurrentValue:  updatedValue,
+			AlarmValue:    alarmValue,
+		})
 		return nil
 	}
 }
@@ -104,3 +130,41 @@ const (
 	crossedAbove
 	crossedBelow
 )
+
+type AggregateObserver interface {
+	Observe(context.Context, AggregateEvent)
+}
+
+type AggregateEvent interface {
+	isAggregateEvent()
+}
+
+type AggregateRaiseAlarmEvent struct {
+	PreviousValue int
+	DeltaValue    int
+	CurrentValue  int
+	AlarmValue    int
+}
+
+func (a AggregateRaiseAlarmEvent) isAggregateEvent() {
+}
+
+type AggregateClearAlarmEvent struct {
+	PreviousValue int
+	DeltaValue    int
+	CurrentValue  int
+	AlarmValue    int
+}
+
+func (a AggregateClearAlarmEvent) isAggregateEvent() {
+}
+
+type AggregateNoCrossingEvent struct {
+	PreviousValue int
+	DeltaValue    int
+	CurrentValue  int
+	AlarmValue    int
+}
+
+func (a AggregateNoCrossingEvent) isAggregateEvent() {
+}

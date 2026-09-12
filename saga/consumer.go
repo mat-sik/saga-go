@@ -16,19 +16,25 @@ type PortOut[T, CT any] interface {
 	TransactionCompensated(ctx context.Context, tx T) (bool, error)
 }
 
-type Consumer[T, CT any] struct {
-	sagaActions []Action[T, CT]
-	portOut     PortOut[T, CT]
+type Consumer[T, CT any] interface {
+	Consume(ctx context.Context, command Command[T, CT]) (err error)
 }
 
-func NewConsumer[T, CT any](sagaActions []Action[T, CT], portOut PortOut[T, CT]) Consumer[T, CT] {
-	return Consumer[T, CT]{
+type consumer[T, CT any] struct {
+	sagaActions []Action[T, CT]
+	portOut     PortOut[T, CT]
+	observer    Observer
+}
+
+func NewConsumer[T, CT any](sagaActions []Action[T, CT], portOut PortOut[T, CT], observer Observer) Consumer[T, CT] {
+	return consumer[T, CT]{
 		sagaActions: sagaActions,
 		portOut:     portOut,
+		observer:    observer,
 	}
 }
 
-func (c Consumer[T, CT]) Consume(ctx context.Context, command Command[T, CT]) (err error) {
+func (c consumer[T, CT]) Consume(ctx context.Context, command Command[T, CT]) (err error) {
 	var alreadyHandled bool
 
 	defer func() {
@@ -42,6 +48,7 @@ func (c Consumer[T, CT]) Consume(ctx context.Context, command Command[T, CT]) (e
 	if alreadyHandled, err = c.portOut.CommandAlreadyHandled(ctx, command); err != nil {
 		return fmt.Errorf("checking if command %v handled: %w", command, err)
 	} else if alreadyHandled {
+		c.observer.Observe(ctx, EventAlreadyHandled)
 		return nil
 	}
 
@@ -60,11 +67,12 @@ func (c Consumer[T, CT]) Consume(ctx context.Context, command Command[T, CT]) (e
 	return nil
 }
 
-func (c Consumer[T, CT]) newSagaActionConsumer(ctx context.Context, command Command[T, CT]) (func(context.Context, Action[T, CT]) error, error) {
+func (c consumer[T, CT]) newSagaActionConsumer(ctx context.Context, command Command[T, CT]) (func(context.Context, Action[T, CT]) error, error) {
 	if tx, ok := command.ToTransaction(); ok {
 		if alreadyCompensated, err := c.portOut.TransactionCompensated(ctx, tx); err != nil {
 			return nil, fmt.Errorf("checking if tx %v compensated: %w", tx, err)
 		} else if alreadyCompensated {
+			c.observer.Observe(ctx, EventAlreadyCompensated)
 			return nil, nil
 		}
 
@@ -87,3 +95,14 @@ func (c Consumer[T, CT]) newSagaActionConsumer(ctx context.Context, command Comm
 
 	return nil, fmt.Errorf("command %v is not transaction nor compensating transaction", command)
 }
+
+type Observer interface {
+	Observe(context.Context, Event)
+}
+
+type Event int
+
+const (
+	EventAlreadyHandled     Event = iota
+	EventAlreadyCompensated Event = iota
+)

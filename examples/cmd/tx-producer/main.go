@@ -9,13 +9,17 @@ import (
 	"math/rand/v2"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/mat-sik/saga-go/examples/internal/adapters/kafka"
 	"github.com/mat-sik/saga-go/examples/internal/config"
+	"github.com/mat-sik/saga-go/examples/internal/otel/kotelinit"
+	"github.com/mat-sik/saga-go/examples/internal/otel/otelinit"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"go.opentelemetry.io/otel/codes"
 )
 
 func main() {
@@ -32,8 +36,25 @@ func run() int {
 		return 1
 	}
 
+	if conf.OTelCollectorHost != "" {
+		var shutdown otelinit.ShutdownFunc
+		shutdown, err = otelinit.InitOTelSDK(ctx, conf.OTelCollectorHost, conf.OTelServiceName)
+		if err != nil {
+			slog.Error("initializing OTel SDK", "err", err)
+			return 1
+		}
+		defer func() {
+			if err = shutdown(context.Background()); err != nil {
+				slog.Error("shutting down OTel SDK", "err", err)
+			}
+		}()
+	}
+
+	kOTelService := kotelinit.NewKOTel()
+
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(conf.KafkaSeeds...),
+		kgo.WithHooks(kOTelService.Hooks()...),
 	}
 
 	client, err := kgo.NewClient(opts...)
@@ -56,27 +77,54 @@ func run() int {
 		return 1
 	}
 
-	records := make([]*kgo.Record, conf.ProduceAmount)
-	for i := range conf.ProduceAmount {
-
+	records := make([]*kgo.Record, 0, conf.ProduceAmount+conf.ProducePoissonPillAmount)
+	for range conf.ProduceAmount {
 		record, err := generator.generateRecord()
 		if err != nil {
 			slog.Error("creating record", "err", err)
 			return 1
 		}
 
-		records[i] = record
+		records = append(records, record)
 	}
 
-	results := client.ProduceSync(ctx, records...)
-
-	var produceErr error
-	for _, result := range results {
-		if err := result.Err; err != nil {
-			produceErr = errors.Join(produceErr, err)
+	for range conf.ProducePoissonPillAmount {
+		record, err := generator.generatePoisonPillRecord()
+		if err != nil {
+			slog.Error("creating poison pill record", "err", err)
+			return 1
 		}
+		records = append(records, record)
 	}
 
+	tracer := otelinit.NewTracer()
+
+	const (
+		spanName = "kafka.publish.record"
+		errDesc  = "publish record failed"
+	)
+
+	errs := make([]error, len(records))
+
+	var wg sync.WaitGroup
+	for i, record := range records {
+		spanCtx, span := tracer.Start(ctx, spanName)
+
+		wg.Add(1)
+		client.Produce(spanCtx, record, func(record *kgo.Record, err error) {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, errDesc)
+				errs[i] = err
+			}
+			span.End()
+			wg.Done()
+		})
+	}
+
+	wg.Wait()
+
+	produceErr := errors.Join(errs...)
 	if produceErr != nil {
 		slog.Error("producing records", "err", produceErr)
 		return 1
@@ -142,6 +190,15 @@ func nextNDays(amount int) []time.Time {
 		days[i] = day
 	}
 	return days
+}
+
+func (g recordGenerator) generatePoisonPillRecord() (*kgo.Record, error) {
+	record, err := g.generateRecord()
+	if err != nil {
+		return nil, err
+	}
+	record.Value = []byte("poison pill body")
+	return record, nil
 }
 
 func (g recordGenerator) generateRecord() (*kgo.Record, error) {

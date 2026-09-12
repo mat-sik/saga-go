@@ -10,24 +10,29 @@ type PortOut interface {
 	Decrement(ctx context.Context) error
 }
 
-type SagaAction[T, CT any] struct {
+type Counter interface {
+	Increment(ctx context.Context) error
+	Decrement(ctx context.Context) error
+}
+
+type counter struct {
 	portOut PortOut
 }
 
-func NewSagaAction[T, CT any](portOut PortOut) SagaAction[T, CT] {
-	return SagaAction[T, CT]{
+func NewCounter(portOut PortOut) Counter {
+	return counter{
 		portOut: portOut,
 	}
 }
 
-func (a SagaAction[T, CT]) Execute(ctx context.Context, _ T) error {
+func (a counter) Increment(ctx context.Context) error {
 	if err := a.portOut.Increment(ctx); err != nil {
 		return fmt.Errorf("incrementing count: %w", err)
 	}
 	return nil
 }
 
-func (a SagaAction[T, CT]) Compensate(ctx context.Context, _ CT) error {
+func (a counter) Decrement(ctx context.Context) error {
 	if err := a.portOut.Decrement(ctx); err != nil {
 		return fmt.Errorf("decrementing count: %w", err)
 	}

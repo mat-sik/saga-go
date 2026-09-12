@@ -8,6 +8,8 @@ import (
 )
 
 type TxValidator struct {
+	OTelCollectorHost              string   `env:"TX_VALIDATOR_OTEL_COLLECTOR_HOST"`
+	OTelServiceName                string   `env:"TX_VALIDATOR_OTEL_SERVICE_NAME, default=tx-validator"`
 	DatabaseURL                    string   `env:"TX_VALIDATOR_DATABASE_URL"`
 	KafkaSeeds                     []string `env:"TX_VALIDATOR_KAFKA_SEEDS"`
 	TransactionsTopic              string   `env:"TX_VALIDATOR_KAFKA_TRANSACTIONS_TOPIC"`

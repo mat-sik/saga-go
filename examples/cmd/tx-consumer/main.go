@@ -19,6 +19,9 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
 	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/mat-sik/saga-go/examples/internal/migrations"
+	"github.com/mat-sik/saga-go/examples/internal/otel/oteldecorator"
+	"github.com/mat-sik/saga-go/examples/internal/otel/otelinit"
+	"github.com/mat-sik/saga-go/examples/internal/otel/otelobserver"
 	"github.com/mat-sik/saga-go/saga"
 )
 
@@ -34,6 +37,20 @@ func run() int {
 	if err != nil {
 		slog.Error("reading tx-consumer config", "err", err)
 		return 1
+	}
+
+	if conf.OTelCollectorHost != "" {
+		var shutdown otelinit.ShutdownFunc
+		shutdown, err = otelinit.InitOTelSDK(ctx, conf.OTelCollectorHost, conf.OTelServiceName)
+		if err != nil {
+			slog.Error("initializing OTel SDK", "err", err)
+			return 1
+		}
+		defer func() {
+			if err = shutdown(context.Background()); err != nil {
+				slog.Error("shutting down OTel SDK", "err", err)
+			}
+		}()
 	}
 
 	pool, err := pgxpool.New(ctx, conf.DatabaseURL)
@@ -70,28 +87,35 @@ func newTxSagaConsumer(conf config.TxConsumer, pool *pgxpool.Pool) (kgoconsumer.
 		return kgoconsumer.Consumer{}, err
 	}
 
+	tracer := otelinit.NewTracer()
+
 	aggregateRepository := postgres.NewAggregateRepository()
 	alarmValueProvider := alarm.NewAlarmValueProvider(static.NewAlarmValueProvider(conf.AlarmValue))
 	alarmRaiser := alarm.NewAlarmRaiser(kafka.NewAlarmProducer(kafkaClient.ToKgo(), conf.AlarmTopic))
 
-	aggregateAction := tx.NewAggregateSagaAction(aggregateRepository, alarmValueProvider, alarmRaiser)
+	aggregate := tx.NewAggregate(aggregateRepository, alarmValueProvider, alarmRaiser, otelobserver.NewAggregateObserver())
+	tracedAggregate := oteldecorator.NewTracedTxAggregate(aggregate, tracer)
+	log := tx.NewLog(postgres.NewLogRepository())
+	tracedLog := oteldecorator.NewTracedTxLog(log, tracer)
+	txSagaAction := sagaadapters.NewTxSagaAction(tracedLog, tracedAggregate)
+	tracedTxSagaAction := oteldecorator.NewTracedTxSagaAction(txSagaAction, tracer)
 
-	logAction := tx.NewLogSagaAction(postgres.NewLogRepository())
+	counter := count.NewCounter(postgres.NewCountRepository())
+	tracedCounter := oteldecorator.NewTracedCounter(counter, tracer)
+	countSagaAction := sagaadapters.NewCountSagaAction[sagaadapters.RegisterSagaCommand, sagaadapters.UnregisterSagaCommand](tracedCounter)
+	tracedCountSagaAction := oteldecorator.NewTracedCountSagaAction(countSagaAction, tracer)
 
-	txAction := sagaadapters.NewTxAction(logAction, aggregateAction)
-
-	countAction := count.NewSagaAction[sagaadapters.RegisterSagaCommand, sagaadapters.UnregisterSagaCommand](postgres.NewCountRepository())
-
-	actions := []saga.Action[sagaadapters.RegisterSagaCommand, sagaadapters.UnregisterSagaCommand]{
-		txAction,
-		countAction,
+	sagaActions := []saga.Action[sagaadapters.RegisterSagaCommand, sagaadapters.UnregisterSagaCommand]{
+		tracedTxSagaAction,
+		tracedCountSagaAction,
 	}
 
-	sagaConsumer := saga.NewConsumer(actions, postgres.NewTxSagaConsumerRepository())
+	sagaConsumer := saga.NewConsumer(sagaActions, postgres.NewTxSagaConsumerRepository(), otelobserver.NewSagaConsumerObserver())
+	tracedSagaConsumer := oteldecorator.NewTracedSagaConsumer(sagaConsumer, tracer)
 
 	txRunner := func(ctx context.Context, fn func(context.Context) error) error {
 		return postgres.WithTx(ctx, pool, fn)
 	}
 
-	return kafka.NewTxSagaConsumer(kafkaClient, txRunner, conf.TransactionsDLQTopic, sagaConsumer)
+	return kafka.NewTxSagaConsumer(kafkaClient, txRunner, conf.TransactionsDLQTopic, tracedSagaConsumer, kgoconsumer.WithTracer(tracer))
 }
