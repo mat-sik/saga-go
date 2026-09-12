@@ -13,12 +13,12 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/adapters/postgres"
 	"github.com/mat-sik/saga-go/examples/internal/config"
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
-	"github.com/mat-sik/saga-go/examples/internal/idempotent"
-	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
 	"github.com/mat-sik/saga-go/examples/internal/migrations"
 	"github.com/mat-sik/saga-go/examples/internal/otel/oteldecorator"
 	"github.com/mat-sik/saga-go/examples/internal/otel/otelinit"
 	"github.com/mat-sik/saga-go/examples/internal/otel/otelobserver"
+	"github.com/mat-sik/saga-go/idempotent"
+	"github.com/mat-sik/saga-go/kgoconsumer"
 )
 
 func main() {

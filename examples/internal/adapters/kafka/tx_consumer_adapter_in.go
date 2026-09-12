@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
-	"github.com/mat-sik/saga-go/examples/internal/idempotent"
-	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
+	"github.com/mat-sik/saga-go/idempotent"
+	"github.com/mat-sik/saga-go/kgoconsumer"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
