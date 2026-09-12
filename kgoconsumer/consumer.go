@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/mat-sik/saga-go/examples/internal/otel/kotelinit"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
 	"go.opentelemetry.io/otel/attribute"
@@ -27,7 +26,7 @@ func NewClient(seeds []string, consumerGroup string, topics []string, opts ...Cl
 	cfg := newClientConfig(opts...)
 	cancelProcessing := newCancelProcessingStore()
 
-	kOTelService := kotelinit.NewKOTel()
+	kOTelService := NewKOTel()
 
 	kgoOpts := []kgo.Opt{
 		kgo.SeedBrokers(seeds...),

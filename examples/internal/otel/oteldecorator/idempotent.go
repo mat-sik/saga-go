@@ -3,8 +3,8 @@ package oteldecorator
 import (
 	"context"
 
-	"github.com/mat-sik/saga-go/examples/internal/idempotent"
 	"github.com/mat-sik/saga-go/examples/internal/otel/spanwrap"
+	"github.com/mat-sik/saga-go/idempotent"
 	"go.opentelemetry.io/otel/trace"
 )
 
