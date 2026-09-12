@@ -10,19 +10,23 @@ type PortOut[T any] interface {
 	MarkMessageAsHandled(ctx context.Context, message T) error
 }
 
-type Consumer[T any] struct {
+type Consumer[T any] interface {
+	Consume(ctx context.Context, message T) (err error)
+}
+
+type consumer[T any] struct {
 	recordConsumers []func(context.Context, T) error
 	portOut         PortOut[T]
 }
 
 func NewConsumer[T any](recordConsumers []func(context.Context, T) error, portOut PortOut[T]) Consumer[T] {
-	return Consumer[T]{
+	return consumer[T]{
 		recordConsumers: recordConsumers,
 		portOut:         portOut,
 	}
 }
 
-func (c Consumer[T]) Consume(ctx context.Context, message T) (err error) {
+func (c consumer[T]) Consume(ctx context.Context, message T) (err error) {
 	var alreadyHandled bool
 
 	defer func() {
