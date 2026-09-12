@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mat-sik/saga-go/examples/internal/idempotent"
+	"github.com/mat-sik/saga-go/idempotent"
 	"go.opentelemetry.io/otel/trace"
 )
 

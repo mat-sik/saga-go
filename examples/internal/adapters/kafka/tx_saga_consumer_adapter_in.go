@@ -8,7 +8,7 @@ import (
 
 	"github.com/mat-sik/saga-go/examples/internal/adapters/sagaadapters"
 	"github.com/mat-sik/saga-go/examples/internal/domain/tx"
-	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
+	"github.com/mat-sik/saga-go/kgoconsumer"
 	"github.com/mat-sik/saga-go/saga"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
