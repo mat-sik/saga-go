@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/otel/kotelinit"
 	"github.com/mat-sik/saga-go/examples/internal/otel/otelinit"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"go.opentelemetry.io/otel/codes"
 )
 
 func main() {
@@ -87,15 +89,34 @@ func run() int {
 		records[i] = record
 	}
 
-	results := client.ProduceSync(ctx, records...)
+	tracer := otelinit.NewTracer()
 
-	var produceErr error
-	for _, result := range results {
-		if err := result.Err; err != nil {
-			produceErr = errors.Join(produceErr, err)
-		}
+	const (
+		spanName = "kafka.publish.record"
+		errDesc  = "publish record failed"
+	)
+
+	errs := make([]error, len(records))
+
+	var wg sync.WaitGroup
+	for i, record := range records {
+		spanCtx, span := tracer.Start(ctx, spanName)
+
+		wg.Add(1)
+		client.Produce(spanCtx, record, func(record *kgo.Record, err error) {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, errDesc)
+				errs[i] = err
+			}
+			span.End()
+			wg.Done()
+		})
 	}
 
+	wg.Wait()
+
+	produceErr := errors.Join(errs...)
 	if produceErr != nil {
 		slog.Error("producing records", "err", produceErr)
 		return 1
