@@ -56,7 +56,7 @@ func NewClient(seeds []string, consumerGroup string, topics []string, opts ...Cl
 
 type Consumer struct {
 	client           *kgo.Client
-	dlqProducer      *dlqProducer
+	dlqTopic         string
 	cancelProcessing *cancelProcessingStore
 	recordConsumer   RecordConsumer
 	config           config
@@ -71,7 +71,7 @@ func NewConsumer(
 	cfg := newConfig(options...)
 	return Consumer{
 		client:           kafkaClient.kgoClient,
-		dlqProducer:      newDlqProducer(kafkaClient.kgoClient, dlqTopic, cfg.tracer),
+		dlqTopic:         dlqTopic,
 		cancelProcessing: kafkaClient.cancelProcessing,
 		recordConsumer:   recordConsumer,
 		config:           cfg,
@@ -189,12 +189,13 @@ func isFatalFetchErr(err error) bool {
 }
 
 func (c Consumer) newBatchConsumer() batchConsumer {
+	tracer := c.config.tracer
 	return batchConsumer{
 		recordConsumer:               c.recordConsumer,
-		dlqProducer:                  c.dlqProducer,
+		dlqProducer:                  newDlqProducer(c.client, c.dlqTopic, tracer),
 		processedEpochOffsetsTracker: newProcessedOffsetsTracker(),
 		backoff:                      c.newBackoff(),
-		tracer:                       c.config.tracer,
+		tracer:                       tracer,
 	}
 }
 
