@@ -77,16 +77,24 @@ func run() int {
 		return 1
 	}
 
-	records := make([]*kgo.Record, conf.ProduceAmount)
-	for i := range conf.ProduceAmount {
-
+	records := make([]*kgo.Record, 0, conf.ProduceAmount+conf.ProducePoissonPillAmount)
+	for range conf.ProduceAmount {
 		record, err := generator.generateRecord()
 		if err != nil {
 			slog.Error("creating record", "err", err)
 			return 1
 		}
 
-		records[i] = record
+		records = append(records, record)
+	}
+
+	for range conf.ProducePoissonPillAmount {
+		record, err := generator.generatePoisonPillRecord()
+		if err != nil {
+			slog.Error("creating poison pill record", "err", err)
+			return 1
+		}
+		records = append(records, record)
 	}
 
 	tracer := otelinit.NewTracer()
@@ -182,6 +190,15 @@ func nextNDays(amount int) []time.Time {
 		days[i] = day
 	}
 	return days
+}
+
+func (g recordGenerator) generatePoisonPillRecord() (*kgo.Record, error) {
+	record, err := g.generateRecord()
+	if err != nil {
+		return nil, err
+	}
+	record.Value = []byte("poison pill body")
+	return record, nil
 }
 
 func (g recordGenerator) generateRecord() (*kgo.Record, error) {
