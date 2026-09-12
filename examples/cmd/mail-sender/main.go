@@ -20,6 +20,7 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/migrations"
 	"github.com/mat-sik/saga-go/examples/internal/otel/oteldecorator"
 	"github.com/mat-sik/saga-go/examples/internal/otel/otelinit"
+	"github.com/mat-sik/saga-go/examples/internal/otel/otelobserver"
 	"github.com/mat-sik/saga-go/saga"
 )
 
@@ -101,13 +102,14 @@ func newAlarmSagaConsumer(conf config.MailSender, pool *pgxpool.Pool) (kgoconsum
 		oteldecorator.NewTracedAlarmSagaAction(alarmSagaAction, tracer),
 	}
 
-	sagaConsumer := saga.NewConsumer(sagaActions, postgres.NewAlarmConsumerRepository())
+	sagaConsumer := saga.NewConsumer(sagaActions, postgres.NewAlarmConsumerRepository(), otelobserver.NewSagaConsumerObserver())
+	tracedSagaConsumer := oteldecorator.NewTracedSagaConsumer(sagaConsumer, tracer)
 
 	txRunner := func(ctx context.Context, fn func(context.Context) error) error {
 		return postgres.WithTx(ctx, pool, fn)
 	}
 
-	return kafka.NewAlarmSagaConsumer(kafkaClient, txRunner, conf.AlarmsDLQTopic, sagaConsumer, kgoconsumer.WithTracer(tracer))
+	return kafka.NewAlarmSagaConsumer(kafkaClient, txRunner, conf.AlarmsDLQTopic, tracedSagaConsumer, kgoconsumer.WithTracer(tracer))
 }
 
 func isDev(conf config.MailSender) bool {

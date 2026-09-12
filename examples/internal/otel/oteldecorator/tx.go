@@ -32,8 +32,11 @@ func (v TracedTxValidator) ValidateAndCompensate(ctx context.Context, cmd tx.Reg
 	work := func(ctx context.Context) error {
 		return v.next.ValidateAndCompensate(ctx, cmd)
 	}
+	attributes := func() []attribute.KeyValue {
+		return attrmap.TxRegister(cmd)
+	}
 
-	return spanwrap.Wrap(ctx, v.tracer, spanName, workErrDesc, work)
+	return spanwrap.WrapWithAttrs(ctx, v.tracer, spanName, workErrDesc, work, attributes)
 }
 
 type TracedTxSagaAction struct {

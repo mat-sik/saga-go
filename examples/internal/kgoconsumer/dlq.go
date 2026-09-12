@@ -29,7 +29,7 @@ func newDlqProducer(client *kgo.Client, dlqTopic string, tracer trace.Tracer) *d
 
 func (p *dlqProducer) produce(ctx context.Context, failed failedRecord) {
 	const (
-		spanName = "record.produce.dlq"
+		spanName = "kafka.produce.record.dlq"
 		errDesc  = "produce to dlq failed"
 	)
 

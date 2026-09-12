@@ -110,11 +110,12 @@ func newTxSagaConsumer(conf config.TxConsumer, pool *pgxpool.Pool) (kgoconsumer.
 		tracedCountSagaAction,
 	}
 
-	sagaConsumer := saga.NewConsumer(sagaActions, postgres.NewTxSagaConsumerRepository())
+	sagaConsumer := saga.NewConsumer(sagaActions, postgres.NewTxSagaConsumerRepository(), otelobserver.NewSagaConsumerObserver())
+	tracedSagaConsumer := oteldecorator.NewTracedSagaConsumer(sagaConsumer, tracer)
 
 	txRunner := func(ctx context.Context, fn func(context.Context) error) error {
 		return postgres.WithTx(ctx, pool, fn)
 	}
 
-	return kafka.NewTxSagaConsumer(kafkaClient, txRunner, conf.TransactionsDLQTopic, sagaConsumer, kgoconsumer.WithTracer(tracer))
+	return kafka.NewTxSagaConsumer(kafkaClient, txRunner, conf.TransactionsDLQTopic, tracedSagaConsumer, kgoconsumer.WithTracer(tracer))
 }

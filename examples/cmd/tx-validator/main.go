@@ -92,11 +92,12 @@ func newTxConsumer(conf config.TxValidator, pool *pgxpool.Pool) (kgoconsumer.Con
 		tracedValidator.ValidateAndCompensate,
 	}
 
-	idempotentConsumer := idempotent.NewConsumer(recordConsumers, postgres.NewTxConsumerRepository())
+	idempotentConsumer := idempotent.NewConsumer(recordConsumers, postgres.NewTxConsumerRepository(), otelobserver.NewIdempotentConsumerObserver())
+	tracedIdempotentConsumer := oteldecorator.NewTracedIdempotentConsumer(idempotentConsumer, tracer)
 
 	txRunner := func(ctx context.Context, fn func(context.Context) error) error {
 		return postgres.WithTx(ctx, pool, fn)
 	}
 
-	return kafka.NewTxConsumer(kafkaClient, txRunner, conf.TransactionsDLQTopic, idempotentConsumer, kgoconsumer.WithTracer(tracer))
+	return kafka.NewTxConsumer(kafkaClient, txRunner, conf.TransactionsDLQTopic, tracedIdempotentConsumer, kgoconsumer.WithTracer(tracer))
 }

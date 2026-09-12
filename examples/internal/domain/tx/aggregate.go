@@ -99,8 +99,11 @@ func (a aggregate) updateAlarmState(ctx context.Context, playerID string, deltaV
 		})
 		return a.alarmRaiser.ClearAlarm(ctx, alarm.NewClearAlarmCommand(id.String(), playerID))
 	default:
-		a.observer.Observe(ctx, AggregateNoChangeEvent{
-			AlarmValue: alarmValue,
+		a.observer.Observe(ctx, AggregateNoCrossingEvent{
+			PreviousValue: previousValue,
+			DeltaValue:    deltaValue,
+			CurrentValue:  updatedValue,
+			AlarmValue:    alarmValue,
 		})
 		return nil
 	}
@@ -156,9 +159,12 @@ type AggregateClearAlarmEvent struct {
 func (a AggregateClearAlarmEvent) isAggregateEvent() {
 }
 
-type AggregateNoChangeEvent struct {
-	AlarmValue int
+type AggregateNoCrossingEvent struct {
+	PreviousValue int
+	DeltaValue    int
+	CurrentValue  int
+	AlarmValue    int
 }
 
-func (a AggregateNoChangeEvent) isAggregateEvent() {
+func (a AggregateNoCrossingEvent) isAggregateEvent() {
 }

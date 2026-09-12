@@ -249,7 +249,7 @@ func (bc batchConsumer) consumeFetches(ctx context.Context, fetches kgo.Fetches)
 
 func (bc batchConsumer) consumeWithRetry(ctx context.Context, record *kgo.Record, errs []error) (_ []error, err error) {
 	const (
-		spanName         = "record.consume"
+		spanName         = "kafka.consume.record"
 		cancelledErrDesc = "consume cancelled"
 		permanentErrDesc = "consume failed permanently"
 	)
@@ -276,7 +276,7 @@ func (bc batchConsumer) consumeWithRetry(ctx context.Context, record *kgo.Record
 			bc.processedEpochOffsetsTracker.registerAsProcessed(record)
 			return errs, nil
 		case errors.Is(err, ErrTransient):
-			span.AddEvent("transient error", trace.WithAttributes(attribute.String("error", err.Error())))
+			span.AddEvent("error.transient", trace.WithAttributes(attribute.String("error", err.Error())))
 
 			errs = append(errs, err)
 			if err = bc.backoff.wait(ctx); err != nil {

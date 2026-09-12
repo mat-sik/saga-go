@@ -17,12 +17,14 @@ type Consumer[T any] interface {
 type consumer[T any] struct {
 	recordConsumers []func(context.Context, T) error
 	portOut         PortOut[T]
+	observer        Observer
 }
 
-func NewConsumer[T any](recordConsumers []func(context.Context, T) error, portOut PortOut[T]) Consumer[T] {
+func NewConsumer[T any](recordConsumers []func(context.Context, T) error, portOut PortOut[T], observer Observer) Consumer[T] {
 	return consumer[T]{
 		recordConsumers: recordConsumers,
 		portOut:         portOut,
+		observer:        observer,
 	}
 }
 
@@ -40,6 +42,7 @@ func (c consumer[T]) Consume(ctx context.Context, message T) (err error) {
 	if alreadyHandled, err = c.portOut.MessageAlreadyHandled(ctx, message); err != nil {
 		return fmt.Errorf("checking if message %v handled: %w", message, err)
 	} else if alreadyHandled {
+		c.observer.Observe(ctx, EventAlreadyHandled)
 		return nil
 	}
 
@@ -51,3 +54,13 @@ func (c consumer[T]) Consume(ctx context.Context, message T) (err error) {
 
 	return nil
 }
+
+type Observer interface {
+	Observe(context.Context, Event)
+}
+
+type Event int
+
+const (
+	EventAlreadyHandled Event = iota
+)

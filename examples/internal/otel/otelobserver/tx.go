@@ -42,10 +42,15 @@ func (TxAggregateObserver) Observe(ctx context.Context, event tx.AggregateEvent)
 				event.AlarmValue,
 			),
 		)
-	case tx.AggregateNoChangeEvent:
+	case tx.AggregateNoCrossingEvent:
 		span.AddEvent(
-			"tx.aggregate.register.no_change",
-			trace.WithAttributes(attribute.Int("value.alarm", event.AlarmValue)),
+			"tx.aggregate.register.no_crossing",
+			aggregateEventAttributes(
+				event.PreviousValue,
+				event.DeltaValue,
+				event.CurrentValue,
+				event.AlarmValue,
+			),
 		)
 	default:
 		panic(fmt.Sprintf("unsupported event type %T", event))
