@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/mat-sik/saga-go/examples/internal/kgoconsumer"
+	"github.com/mat-sik/saga-go/kgoconsumer"
 )
 
 func wrapIfTransient(err error) error {
