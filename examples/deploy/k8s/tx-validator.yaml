@@ -1,0 +1,61 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: tx-validator-db
+  namespace: saga-go
+  labels:
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: tx-validator
+spec:
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6
+  instances: 1
+  bootstrap:
+    initdb:
+      database: tx-validator
+      owner: tx-validator
+  storage:
+    size: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tx-validator
+  namespace: saga-go
+  labels:
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: tx-validator
+spec:
+  selector:
+    matchLabels:
+      app: tx-validator
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: tx-validator
+    spec:
+      containers:
+        - name: tx-validator
+          image: tx-validator:0.0.1
+          env:
+            - name: TX_VALIDATOR_OTEL_COLLECTOR_HOST
+              value: ''
+            - name: TX_VALIDATOR_OTEL_SERVICE_NAME
+              value: ''
+            - name: TX_VALIDATOR_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: tx-validator-db-app
+                  key: uri
+            - name: TX_VALIDATOR_KAFKA_SEEDS
+              value: kafka-kafka-bootstrap:9092
+            - name: TX_VALIDATOR_KAFKA_TRANSACTIONS_TOPIC
+              value: transactions
+            - name: TX_VALIDATOR_KAFKA_TRANSACTIONS_DLQ_TOPIC
+              value: transactions-dlq
+            - name: TX_VALIDATOR_KAFKA_TRANSACTIONS_TOPIC_CONSUMER_GROUP
+              value: tx-validator
+            - name: TX_VALIDATOR_KAFKA_CONSUMER_COUNT
+              value: '5'
+            - name: TX_VALIDATOR_KAFKA_COMPENSATE_PERCENT
+              value: '50'

@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: tx-producer
+  namespace: saga-go
+  labels:
+    app.kubernetes.io/component: producer
+    app.kubernetes.io/part-of: tx-producer
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: tx-producer
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: tx-producer
+          image: tx-producer:0.0.1
+          env:
+            - name: TX_PRODUCER_OTEL_COLLECTOR_HOST
+              value: otel-lgtm:4317
+            - name: TX_PRODUCER_OTEL_SERVICE_NAME
+              value: tx-producer
+            - name: TX_PRODUCER_KAFKA_SEEDS
+              value: kafka-kafka-bootstrap:9092
+            - name: TX_PRODUCER_KAFKA_TRANSACTIONS_TOPIC
+              value: transactions
+            - name: TX_PRODUCER_PRODUCE_AMOUNT
+              value: '1000'
+            - name: TX_PRODUCER_PRODUCE_POISON_PILL_AMOUNT
+              value: '5'
+            - name: TX_PRODUCER_GENERATOR_CURRENCIES
+              value: EUR,USD,PLN
+            - name: TX_PRODUCER_GENERATOR_PLAYER_ID_AMOUNT
+              value: '10'
+            - name: TX_PRODUCER_GENERATOR_TRANSACTION_ID_AMOUNT
+              value: '10000'
+            - name: TX_PRODUCER_GENERATOR_DAYS_AMOUNT
+              value: '10'
+            - name: TX_PRODUCER_GENERATOR_MAX_VALUE
+              value: '100'

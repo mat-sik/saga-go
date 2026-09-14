@@ -1,0 +1,63 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: tx-consumer-db
+  namespace: saga-go
+  labels:
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: tx-consumer
+spec:
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6
+  instances: 1
+  bootstrap:
+    initdb:
+      database: tx-consumer
+      owner: tx-consumer
+  storage:
+    size: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tx-consumer
+  namespace: saga-go
+  labels:
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: tx-consumer
+spec:
+  selector:
+    matchLabels:
+      app: tx-consumer
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: tx-consumer
+    spec:
+      containers:
+        - name: tx-consumer
+          image: tx-consumer:0.0.1
+          env:
+            - name: TX_CONSUMER_OTEL_COLLECTOR_HOST
+              value: ''
+            - name: TX_CONSUMER_OTEL_SERVICE_NAME
+              value: ''
+            - name: TX_CONSUMER_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: tx-consumer-db-app
+                  key: uri
+            - name: TX_CONSUMER_KAFKA_SEEDS
+              value: kafka-kafka-bootstrap:9092
+            - name: TX_CONSUMER_KAFKA_TRANSACTIONS_TOPIC
+              value: transactions
+            - name: TX_CONSUMER_KAFKA_TRANSACTIONS_DLQ_TOPIC
+              value: transactions-dlq
+            - name: TX_CONSUMER_KAFKA_TRANSACTIONS_TOPIC_CONSUMER_GROUP
+              value: tx-consumer
+            - name: TX_CONSUMER_KAFKA_ALARM_TOPIC
+              value: alarms
+            - name: TX_CONSUMER_KAFKA_CONSUMER_COUNT
+              value: '1'
+            - name: TX_CONSUMER_ALARM_VALUE
+              value: '50'
