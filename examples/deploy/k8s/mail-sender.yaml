@@ -69,7 +69,7 @@ metadata:
   namespace: saga-go
   labels:
     app.kubernetes.io/component: application
-    app.kubernetes.io/part-of: mail-sender
+    app.kubernetes.io/part-of: saga-go
 spec:
   selector:
     matchLabels:

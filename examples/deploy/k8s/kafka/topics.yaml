@@ -5,7 +5,8 @@ metadata:
   namespace: saga-go
   labels:
     strimzi.io/cluster: kafka
-    app.kubernetes.io/part-of: saga-go
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: kafka
 spec:
   partitions: 5
   replicas: 1
@@ -17,7 +18,8 @@ metadata:
   namespace: saga-go
   labels:
     strimzi.io/cluster: kafka
-    app.kubernetes.io/part-of: saga-go
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: kafka
 spec:
   partitions: 5
   replicas: 1
@@ -29,7 +31,8 @@ metadata:
   namespace: saga-go
   labels:
     strimzi.io/cluster: kafka
-    app.kubernetes.io/part-of: saga-go
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: kafka
 spec:
   partitions: 5
   replicas: 1
@@ -41,7 +44,8 @@ metadata:
   namespace: saga-go
   labels:
     strimzi.io/cluster: kafka
-    app.kubernetes.io/part-of: saga-go
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: kafka
 spec:
   partitions: 5
   replicas: 1

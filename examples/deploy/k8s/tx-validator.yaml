@@ -23,7 +23,7 @@ metadata:
   namespace: saga-go
   labels:
     app.kubernetes.io/component: application
-    app.kubernetes.io/part-of: tx-validator
+    app.kubernetes.io/part-of: saga-go
 spec:
   selector:
     matchLabels:

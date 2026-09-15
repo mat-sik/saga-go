@@ -5,7 +5,7 @@ metadata:
   namespace: saga-go
   labels:
     app.kubernetes.io/component: producer
-    app.kubernetes.io/part-of: tx-producer
+    app.kubernetes.io/part-of: saga-go
 spec:
   backoffLimit: 3
   template:
