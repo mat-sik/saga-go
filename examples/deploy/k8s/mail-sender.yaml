@@ -85,7 +85,7 @@ spec:
           image: mail-sender:0.0.1
           env:
             - name: MAIL_SENDER_OTEL_COLLECTOR_HOST
-              value: otel-lgtm:4317
+              value: lgtm:4317
             - name: MAIL_SENDER_OTEL_SERVICE_NAME
               value: mail-sender
             - name: MAIL_SENDER_DATABASE_URL

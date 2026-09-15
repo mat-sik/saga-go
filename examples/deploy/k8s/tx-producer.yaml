@@ -19,7 +19,7 @@ spec:
           image: tx-producer:0.0.1
           env:
             - name: TX_PRODUCER_OTEL_COLLECTOR_HOST
-              value: otel-lgtm:4317
+              value: lgtm:4317
             - name: TX_PRODUCER_OTEL_SERVICE_NAME
               value: tx-producer
             - name: TX_PRODUCER_KAFKA_SEEDS

@@ -39,9 +39,9 @@ spec:
           image: tx-consumer:0.0.1
           env:
             - name: TX_CONSUMER_OTEL_COLLECTOR_HOST
-              value: ''
+              value: lgtm:4317
             - name: TX_CONSUMER_OTEL_SERVICE_NAME
-              value: ''
+              value: tx-consumer
             - name: TX_CONSUMER_DATABASE_URL
               valueFrom:
                 secretKeyRef:

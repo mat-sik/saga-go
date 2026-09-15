@@ -58,3 +58,9 @@ kubectl port-forward -n saga-go service/kafka-ui 8080:8080
 ```shell
 kubectl port-forward -n saga-go service/mailhog 8025:8025
 ```
+
+##### Grafana UI
+
+```shell
+kubectl port-forward service/lgtm 3000:3000
+```

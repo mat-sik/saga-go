@@ -39,9 +39,9 @@ spec:
           image: tx-validator:0.0.1
           env:
             - name: TX_VALIDATOR_OTEL_COLLECTOR_HOST
-              value: ''
+              value: lgtm:4317
             - name: TX_VALIDATOR_OTEL_SERVICE_NAME
-              value: ''
+              value: tx-validator
             - name: TX_VALIDATOR_DATABASE_URL
               valueFrom:
                 secretKeyRef:
