@@ -1,14 +1,150 @@
-## k8s
+# saga-go
 
-### Prerequisites
+[![CI](https://github.com/mat-sik/saga-go/actions/workflows/ci.yaml/badge.svg)](https://github.com/mat-sik/saga-go/actions)
+[![License](https://img.shields.io/github/license/mat-sik/saga-go)](https://github.com/mat-sik/saga-go/blob/main/LICENSE)
+
+An example event-driven system implementing a **choreography-based Saga** (not orchestrated) for distributed
+transaction processing, plus the reusable Kafka consumer libraries it's built on. OpenTelemetry tracing runs
+through the full saga flow, and the example app can be deployed via Docker Compose or Kubernetes (Helm charts,
+PostgreSQL and Kafka operators).
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Library Packages](#library-packages)
+- [Architecture](#architecture)
+    - [tx-producer](#tx-producer)
+    - [tx-consumer](#tx-consumer)
+    - [tx-validator](#tx-validator)
+    - [mail-sender](#mail-sender)
+- [Saga Flow](#saga-flow)
+- [Tech Stack](#tech-stack)
+- [Observability](#observability)
+- [Deployment](#deployment)
+    - [Docker Compose](#docker-compose)
+    - [Kubernetes](#kubernetes)
+- [License](#license)
+
+## Overview
+
+The example app registers and validates financial transactions, aggregated per player, date, and currency. When
+an aggregate exceeds a configured limit, an alarm is raised and an email is sent; if the triggering transaction
+is later compensated, the alarm is cleared and a follow-up email is sent. Unsuccessful validation triggers the
+saga's compensating flow, unwinding the transaction.
+
+## Library Packages
+
+Three standalone packages. Only `kgoconsumer` is Kafka-specific; `idempotent` and `saga` are transport-agnostic (generic
+over the message type) and don't depend on `kgoconsumer` at all — in the example app they're wired to
+it by passing a `kgoconsumer.RecordConsumer` function that delegates into an `idempotent.Consumer` or
+`saga.Consumer`, but either could just as easily wrap a different message source.
+
+- **`kgoconsumer`** — a Kafka consumer built on [franz-go](https://github.com/twmb/franz-go). Polls records and
+  retries a record on transient errors (`ErrTransient`) with backoff for a configurable duration; any other
+  error is treated as permanent and the record is published to a DLQ topic straight away.
+- **`idempotent`** — a generic idempotent consumer (`Consumer[T]`). Before running its consumer functions on a
+  message, it asks a `PortOut` whether that message was already handled; if not, it runs them and then marks
+  the message as handled. Has no Kafka dependency — `T` and the `PortOut` implementation are supplied by the
+  caller.
+- **`saga`** — a generic saga consumer (`Consumer[T, CT]`) built around the same already-handled check as
+  `idempotent`, plus one more: for a compensating command it looks up whether the transaction it targets has
+  already been compensated, so a compensating command that arrives before the original transaction is still
+  handled correctly instead of being silently missed. Runs a configurable list of `Action[T, CT]`s (each with
+  `Execute` and `Compensate`) against the resolved transaction or compensating transaction.
+
+## Architecture
+
+The project is composed of four components:
+
+```mermaid
+flowchart LR
+    P[tx-producer] -->|register commands| T[[transactions topic]]
+    T -->|register / unregister commands| C[tx-consumer]
+    T -->|register commands| V[tx-validator]
+    V -->|unregister command on validation unsuccessful| T
+    C -->|raise alarm / clear alarm commands| A[[alarms topic]]
+    A --> M[mail-sender]
+```
+
+### tx-producer
+
+Component that is responsible for generating a configurable stream of commands triggering transaction
+registration.
+
+### tx-consumer
+
+Component that is responsible for processing transactions. It aggregates transactions by player, date and
+currency. Stores log records of each transaction. Raises or clears alarm by publishing alarm commands to the
+alarms topic when the aggregated value limit is exceeded. On a compensating transaction, the value of the
+transaction is subtracted from the aggregate. If an alarm-raising command has been published, an alarm-clearing
+command will be published. Uses the `saga` consumer.
+
+### tx-validator
+
+Component that consumes the same registration transactions as tx-consumer and validates them. When validation
+is unsuccessful, an unregister command is issued, which acts as the compensating transaction that starts the
+compensation flow of the saga. Uses the `idempotent` consumer.
+
+### mail-sender
+
+Component that sends e-mails for alarm commands. If some transaction caused the aggregated value limit to be
+exceeded, an e-mail describing the limit exceeding will be sent. If later the same transaction is compensated,
+an e-mail regarding clearing the alarm will be sent. Uses the `saga` consumer.
+
+Both the `register`/`unregister` commands and the `raise`/`clear` alarm commands share a single topic each
+(transactions, alarms), and every topic has a corresponding DLQ topic.
+
+## Saga Flow
+
+1. `tx-producer` emits a registration command.
+2. `tx-consumer` aggregates the transaction and evaluates the limit; `tx-validator` independently validates it.
+3. If validation is unsuccessful, `tx-validator` emits an `unregister` (compensating) command, which `tx-consumer`
+   subtracts from the aggregate — the saga compensates itself without manual intervention.
+4. If an aggregate crosses its limit, `tx-consumer` publishes an alarm command; `mail-sender` sends the
+   corresponding email. Clearing follows the same path in reverse.
+
+## Tech Stack
+
+- Language: Go
+- Messaging: Apache Kafka (via franz-go)
+- Database: PostgreSQL
+- Tracing: OpenTelemetry
+- Deployment: Docker Compose, or Kubernetes with Helm
+
+## Observability
+
+Each component is instrumented with OpenTelemetry, so a single transaction can be traced end-to-end — from
+initial registration in `tx-producer`, through aggregation and validation, to any resulting alarm email.
+
+## Deployment
+
+### Docker Compose
+
+Compose file: [
+`examples/deploy/docker-compose.yaml`](https://github.com/mat-sik/saga-go/blob/main/examples/deploy/docker-compose.yaml).
+It expects locally built `tx-producer`, `tx-consumer`, `tx-validator`, and `mail-sender` images (version `0.0.1`
+by default) plus Kafka, a Postgres instance per component, MailHog, and the Grafana OTel-LGTM stack.
+
+```shell
+cd examples
+make docker-build          # builds the four component images
+cd deploy
+docker compose up
+```
+
+UIs: Kafka UI on `localhost:8080`, MailHog on `localhost:8025`, Grafana on `localhost:3000`.
+
+### Kubernetes
+
+#### Prerequisites
 
 - kubectl
 - minikube
 - helm
 
-### Setup
+#### Setup
 
-#### Load images
+**Load images**
 
 ```shell
 for img in mail-sender tx-consumer tx-producer tx-validator; do
@@ -16,7 +152,7 @@ for img in mail-sender tx-consumer tx-producer tx-validator; do
 done
 ```
 
-#### Install cloudnative-pg operator
+**Install cloudnative-pg operator**
 
 ```shell
 helm upgrade --install cnpg \
@@ -26,7 +162,7 @@ helm upgrade --install cnpg \
   --create-namespace
 ```
 
-#### Install strimzi operator
+**Install strimzi operator**
 
 ```shell
 kubectl create namespace saga-go
@@ -39,28 +175,26 @@ helm upgrade --install strimzi-cluster-operator \
   --set 'watchNamespaces={saga-go}'
 ```
 
-#### Deploy project
+**Deploy project**
 
 ```shell
 kubectl apply -R -f examples/deploy/k8s/
 ```
 
-#### port forward UIs
-
-##### Kafka UI
+**Port-forward UIs**
 
 ```shell
-kubectl port-forward -n saga-go service/kafka-ui 8080:8080
+kubectl port-forward -n saga-go service/kafka-ui 8080:8080   # Kafka UI
 ```
-
-##### MailHog UI
 
 ```shell
-kubectl port-forward -n saga-go service/mailhog 8025:8025
+kubectl port-forward -n saga-go service/mailhog 8025:8025    # MailHog UI
 ```
-
-##### Grafana UI
 
 ```shell
-kubectl port-forward -n saga-go service/lgtm 3000:3000
+kubectl port-forward -n saga-go service/lgtm 3000:3000       # Grafana UI
 ```
+
+## License
+
+See [LICENSE](https://github.com/mat-sik/saga-go/blob/main/LICENSE).
