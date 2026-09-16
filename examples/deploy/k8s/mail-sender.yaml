@@ -1,0 +1,117 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailhog
+  namespace: saga-go
+  labels:
+    app.kubernetes.io/component: mailhog
+    app.kubernetes.io/part-of: mail-sender
+spec:
+  selector:
+    app: mailhog
+  ports:
+    - name: smtp
+      port: 1025
+      targetPort: smtp
+    - name: http
+      port: 8025
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailhog
+  namespace: saga-go
+  labels:
+    app.kubernetes.io/component: mailhog
+    app.kubernetes.io/part-of: mail-sender
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mailhog
+  template:
+    metadata:
+      labels:
+        app: mailhog
+    spec:
+      containers:
+        - name: mailhog
+          image: mailhog/mailhog:v1.0.1
+          ports:
+            - name: smtp
+              containerPort: 1025
+            - name: http
+              containerPort: 8025
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: mail-sender-db
+  namespace: saga-go
+  labels:
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: mail-sender
+spec:
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6
+  instances: 1
+  bootstrap:
+    initdb:
+      database: mail-sender
+      owner: mail-sender
+  storage:
+    size: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mail-sender
+  namespace: saga-go
+  labels:
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: saga-go
+spec:
+  selector:
+    matchLabels:
+      app: mail-sender
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mail-sender
+    spec:
+      containers:
+        - name: mail-sender
+          image: mail-sender:0.0.1
+          env:
+            - name: MAIL_SENDER_OTEL_COLLECTOR_HOST
+              value: lgtm:4317
+            - name: MAIL_SENDER_OTEL_SERVICE_NAME
+              value: mail-sender
+            - name: MAIL_SENDER_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: mail-sender-db-app
+                  key: uri
+            - name: MAIL_SENDER_KAFKA_SEEDS
+              value: kafka-kafka-bootstrap:9092
+            - name: MAIL_SENDER_KAFKA_ALARMS_TOPIC
+              value: alarms
+            - name: MAIL_SENDER_KAFKA_ALARMS_DLQ_TOPIC
+              value: alarms-dlq
+            - name: MAIL_SENDER_KAFKA_ALARMS_TOPIC_CONSUMER_GROUP
+              value: mail-sender
+            - name: MAIL_SENDER_KAFKA_CONSUMER_COUNT
+              value: '5'
+            - name: MAIL_SENDER_SMTP_HOST
+              value: mailhog
+            - name: MAIL_SENDER_SMTP_PORT
+              value: '1025'
+            - name: MAIL_SENDER_SMTP_USERNAME
+              value: ''
+            - name: MAIL_SENDER_SMTP_PASSWORD
+              value: ''
+            - name: MAIL_SENDER_MAIL_FROM
+              value: alerts@local.test
+            - name: MAIL_SENDER_MAIL_TO
+              value: you@local.test

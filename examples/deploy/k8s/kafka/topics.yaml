@@ -1,0 +1,51 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: transactions
+  namespace: saga-go
+  labels:
+    strimzi.io/cluster: kafka
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: kafka
+spec:
+  partitions: 5
+  replicas: 1
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: transactions-dlq
+  namespace: saga-go
+  labels:
+    strimzi.io/cluster: kafka
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: kafka
+spec:
+  partitions: 5
+  replicas: 1
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: alarms
+  namespace: saga-go
+  labels:
+    strimzi.io/cluster: kafka
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: kafka
+spec:
+  partitions: 5
+  replicas: 1
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: alarms-dlq
+  namespace: saga-go
+  labels:
+    strimzi.io/cluster: kafka
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: kafka
+spec:
+  partitions: 5
+  replicas: 1
