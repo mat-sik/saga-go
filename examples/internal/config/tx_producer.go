@@ -14,6 +14,7 @@ type TxProducer struct {
 	TransactionsTopic        string   `env:"TX_PRODUCER_KAFKA_TRANSACTIONS_TOPIC"`
 	ProduceAmount            int      `env:"TX_PRODUCER_PRODUCE_AMOUNT"`
 	ProducePoissonPillAmount int      `env:"TX_PRODUCER_PRODUCE_POISON_PILL_AMOUNT"`
+	ProduceRate              int      `env:"TX_PRODUCER_PRODUCE_RATE"`
 	Currencies               []string `env:"TX_PRODUCER_GENERATOR_CURRENCIES"`
 	PlayerIDAmount           int      `env:"TX_PRODUCER_GENERATOR_PLAYER_ID_AMOUNT"`
 	TransactionIDAmount      int      `env:"TX_PRODUCER_GENERATOR_TRANSACTION_ID_AMOUNT"`
