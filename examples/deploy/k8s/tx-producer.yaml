@@ -30,6 +30,8 @@ spec:
               value: '1000'
             - name: TX_PRODUCER_PRODUCE_POISON_PILL_AMOUNT
               value: '5'
+            - name: TX_PRODUCER_PRODUCE_RATE
+              value: '10'
             - name: TX_PRODUCER_GENERATOR_CURRENCIES
               value: EUR,USD,PLN
             - name: TX_PRODUCER_GENERATOR_PLAYER_ID_AMOUNT

@@ -20,6 +20,8 @@ import (
 	"github.com/mat-sik/saga-go/examples/internal/otel/otelinit"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/time/rate"
 )
 
 func main() {
@@ -99,6 +101,15 @@ func run() int {
 
 	tracer := otelinit.NewTracer()
 
+	if produceErr := produce(ctx, tracer, client, records, conf.ProduceRate); produceErr != nil {
+		slog.Error("producing records", "err", produceErr)
+		return 1
+	}
+
+	return 0
+}
+
+func produce(ctx context.Context, tracer trace.Tracer, client *kgo.Client, records []*kgo.Record, produceRate int) (err error) {
 	const (
 		spanName = "kafka.publish.record"
 		errDesc  = "publish record failed"
@@ -106,8 +117,24 @@ func run() int {
 
 	errs := make([]error, len(records))
 
+	limiter := rate.NewLimiter(rate.Limit(produceRate), produceRate)
+
 	var wg sync.WaitGroup
+	defer func() {
+		wg.Wait()
+		produceErr := errors.Join(errs...)
+		if err != nil {
+			err = errors.Join(produceErr, err)
+		} else {
+			err = produceErr
+		}
+	}()
+
 	for i, record := range records {
+		if err = limiter.Wait(ctx); err != nil {
+			return fmt.Errorf("waiting on limiter: %w", err)
+		}
+
 		spanCtx, span := tracer.Start(ctx, spanName)
 
 		wg.Add(1)
@@ -122,15 +149,7 @@ func run() int {
 		})
 	}
 
-	wg.Wait()
-
-	produceErr := errors.Join(errs...)
-	if produceErr != nil {
-		slog.Error("producing records", "err", produceErr)
-		return 1
-	}
-
-	return 0
+	return nil
 }
 
 type recordGenerator struct {
