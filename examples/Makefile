@@ -2,7 +2,7 @@
 test:
 	go test ./...
 
-VERSION ?= $(shell git describe --tags --abbrev=0 --match 'saga-go/v*' | sed 's#saga-go/v##')
+VERSION ?= $(shell git tag -l 'saga/v*' | sed 's#saga/v##' | sort -V | tail -1)
 
 .PHONY: docker-build-mail-sender docker-build-tx-consumer docker-build-tx-producer docker-build-tx-validator docker-build
 
