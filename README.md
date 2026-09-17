@@ -298,7 +298,13 @@ kubectl apply -R -f examples/deploy/k8s/
 
 ```shell
 kubectl port-forward -n saga-go service/kafka-ui 8080:8080   # Kafka UI
+```
+
+```shell
 kubectl port-forward -n saga-go service/mailhog 8025:8025    # MailHog UI
+```
+
+```shell
 kubectl port-forward -n saga-go service/lgtm 3000:3000       # Grafana UI
 ```
 
