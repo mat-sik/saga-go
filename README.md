@@ -42,7 +42,9 @@ it by passing a `kgoconsumer.RecordConsumer` function that delegates into an `id
 
 - **`kgoconsumer`** — a Kafka consumer built on [franz-go](https://github.com/twmb/franz-go). Polls records and
   retries a record on transient errors (`ErrTransient`) with backoff for a configurable duration; any other
-  error is treated as permanent and the record is published to a DLQ topic straight away.
+  error is treated as permanent and the record is published to a DLQ topic straight away. Handles partition
+  rebalances gracefully — in-flight processing is cancelled when a rebalance blocks, and a cancelled batch is
+  correctly refetched afterward rather than lost or reprocessed out of order.
 - **`idempotent`** — a generic idempotent consumer (`Consumer[T]`). Before running its consumer functions on a
   message, it asks a `PortOut` whether that message was already handled; if not, it runs them and then marks
   the message as handled. Has no Kafka dependency — `T` and the `PortOut` implementation are supplied by the
