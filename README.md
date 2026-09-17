@@ -37,20 +37,20 @@ saga's compensating flow, unwinding the transaction.
 ## Library Packages
 
 Three standalone packages. Only `kgoconsumer` is Kafka-specific; `idempotent` and `saga` are transport-agnostic (generic
-over the message type) and don't depend on `kgoconsumer` at all — in the example app they're wired to
+over the message type) and don't depend on `kgoconsumer` at all - in the example app they're wired to
 it by passing a `kgoconsumer.RecordConsumer` function that delegates into an `idempotent.Consumer` or
 `saga.Consumer`, but either could just as easily wrap a different message source.
 
-- **`kgoconsumer`** — a Kafka consumer built on [franz-go](https://github.com/twmb/franz-go). Polls records and
+- **`kgoconsumer`** - a Kafka consumer built on [franz-go](https://github.com/twmb/franz-go). Polls records and
   retries a record on transient errors (`ErrTransient`) with backoff for a configurable duration; any other
   error is treated as permanent and the record is published to a DLQ topic straight away. Handles partition
-  rebalances gracefully — in-flight processing is cancelled when a rebalance blocks, and a cancelled batch is
+  rebalances gracefully - in-flight processing is cancelled when a rebalance blocks, and a cancelled batch is
   correctly refetched afterward rather than lost or reprocessed out of order.
-- **`idempotent`** — a generic idempotent consumer (`Consumer[T]`). Before running its consumer functions on a
+- **`idempotent`** - a generic idempotent consumer (`Consumer[T]`). Before running its consumer functions on a
   message, it asks a `PortOut` whether that message was already handled; if not, it runs them and then marks
-  the message as handled. Has no Kafka dependency — `T` and the `PortOut` implementation are supplied by the
+  the message as handled. Has no Kafka dependency - `T` and the `PortOut` implementation are supplied by the
   caller.
-- **`saga`** — a generic saga consumer (`Consumer[T, CT]`) built around the same already-handled check as
+- **`saga`** - a generic saga consumer (`Consumer[T, CT]`) built around the same already-handled check as
   `idempotent`, plus one more: for a compensating command it looks up whether the transaction it targets has
   already been compensated, so a compensating command that arrives before the original transaction is still
   handled correctly instead of being silently missed. Runs a configurable list of `Action[T, CT]`s (each with
@@ -103,13 +103,13 @@ Both the `register`/`unregister` commands and the `raise`/`clear` alarm commands
 1. `tx-producer` emits a registration command.
 2. `tx-consumer` aggregates the transaction and evaluates the limit; `tx-validator` independently validates it.
 3. If validation is unsuccessful, `tx-validator` emits an `unregister` (compensating) command, which `tx-consumer`
-   subtracts from the aggregate — the saga compensates itself without manual intervention.
+   subtracts from the aggregate - the saga compensates itself without manual intervention.
 4. If an aggregate crosses its limit, `tx-consumer` publishes an alarm command; `mail-sender` sends the
    corresponding email. Clearing follows the same path in reverse.
 
 ## Testing
 
-- **Unit tests** cover the pure logic in `kgoconsumer` — `TestBackoff_*` for the retry/backoff calculator,
+- **Unit tests** cover the pure logic in `kgoconsumer` - `TestBackoff_*` for the retry/backoff calculator,
   `TestProcessedEpochOffsetsTracker*` for offset-commit bookkeeping, and `TestCancelProcessingStore_*` for the
   rebalance-cancellation state machine. Run them with `go test ./...` inside each module (`kgoconsumer`,
   `idempotent`, `saga`, `examples`).
@@ -118,8 +118,8 @@ Both the `register`/`unregister` commands and the `raise`/`clear` alarm commands
   Kafka broker with [testcontainers-go](https://github.com/testcontainers/testcontainers-go)
   (`confluentinc/confluent-local`) in `TestMain`, then produce and consume against it with `franz-go` directly.
   They exercise:
-    - `TestConsumption` — records are actually processed end-to-end through the consumer.
-    - `TestRebalance` / `TestRebalance_CancelledBatchIsRefetchedWithoutRevoke` — verify that `kgoconsumer` handles
+    - `TestConsumption` - records are actually processed end-to-end through the consumer.
+    - `TestRebalance` / `TestRebalance_CancelledBatchIsRefetchedWithoutRevoke` - verify that `kgoconsumer` handles
       Kafka partition rebalances gracefully: in-flight processing is cancelled when a rebalance blocks, and a
       cancelled batch is correctly refetched afterward rather than lost or reprocessed out of order.
 
@@ -136,8 +136,28 @@ Both the `register`/`unregister` commands and the `raise`/`clear` alarm commands
 
 ## Observability
 
-Each component is instrumented with OpenTelemetry, so a single transaction can be traced end-to-end — from
+Each component is instrumented with OpenTelemetry, so a single transaction can be traced end-to-end - from
 initial registration in `tx-producer`, through aggregation and validation, to any resulting alarm email.
+
+### OTel Instrumentation
+
+Traces, metrics, and logs are all exported via **OTLP over gRPC** to an OTel collector (`otel-lgtm` in Docker
+Compose / `lgtm` in Kubernetes) - see `examples/internal/otel/otelinit`, which registers an
+`otlptracegrpc`/`otlpmetricgrpc`/`otlploggrpc` exporter per signal against a single gRPC connection, using
+`AlwaysSample` and a batch span processor.
+
+Trace context propagates across process and Kafka boundaries using the W3C `TraceContext` and `Baggage`
+propagators (`propagation.NewCompositeTextMapPropagator`). Kafka producing/consuming is instrumented via
+franz-go's [`kotel`](https://github.com/twmb/franz-go/tree/master/plugin/kotel) plugin (`kgoconsumer/kotelinit.go`),
+which automatically injects the trace context into Kafka record headers on produce and extracts it on consume.
+`kgoconsumer` then starts a `kafka.consume.record` span per record, parented to that extracted context. The
+practical effect: a trace started in `tx-producer` continues unbroken as the command crosses the `transactions`
+topic into `tx-consumer`/`tx-validator`, and again as an alarm command crosses the `alarms` topic into
+`mail-sender` - so the whole saga flow for one transaction shows up as a single trace.
+
+![OTel trace](figures/otel-trace.png)
+
+![grafana service graph](figures/grafana-service-graph.png)
 
 ## Configuration
 
