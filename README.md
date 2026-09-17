@@ -58,7 +58,11 @@ it by passing a `kgoconsumer.RecordConsumer` function that delegates into an `id
 
 ## Architecture
 
-The project is composed of four components:
+The project is composed of four components. Each component follows **hexagonal (ports and adapters)
+architecture**: its domain layer (`internal/domain/`) holds the core saga/aggregation logic fully decoupled
+from any framework or infrastructure concern, and is driven and served entirely through ports implemented by
+adapters (`internal/adapters/kafka`, `.../postgres`, `.../mail`, `.../static`) for Kafka, Postgres, e-mail, and
+static (hardcoded) config.
 
 ```mermaid
 flowchart LR
