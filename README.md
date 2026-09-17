@@ -18,6 +18,7 @@ PostgreSQL and Kafka operators).
     - [tx-validator](#tx-validator)
     - [mail-sender](#mail-sender)
 - [Saga Flow](#saga-flow)
+- [Testing](#testing)
 - [Tech Stack](#tech-stack)
 - [Observability](#observability)
 - [Deployment](#deployment)
@@ -103,6 +104,25 @@ Both the `register`/`unregister` commands and the `raise`/`clear` alarm commands
 4. If an aggregate crosses its limit, `tx-consumer` publishes an alarm command; `mail-sender` sends the
    corresponding email. Clearing follows the same path in reverse.
 
+## Testing
+
+- **Unit tests** cover the pure logic in `kgoconsumer` — `TestBackoff_*` for the retry/backoff calculator,
+  `TestProcessedEpochOffsetsTracker*` for offset-commit bookkeeping, and `TestCancelProcessingStore_*` for the
+  rebalance-cancellation state machine. Run them with `go test ./...` inside each module (`kgoconsumer`,
+  `idempotent`, `saga`, `examples`).
+
+- **Integration tests** for `kgoconsumer` (`kgoconsumer/test/`) spin up a real
+  Kafka broker with [testcontainers-go](https://github.com/testcontainers/testcontainers-go)
+  (`confluentinc/confluent-local`) in `TestMain`, then produce and consume against it with `franz-go` directly.
+  They exercise:
+    - `TestConsumption` — records are actually processed end-to-end through the consumer.
+    - `TestRebalance` / `TestRebalance_CancelledBatchIsRefetchedWithoutRevoke` — verify that `kgoconsumer` handles
+      Kafka partition rebalances gracefully: in-flight processing is cancelled when a rebalance blocks, and a
+      cancelled batch is correctly refetched afterward rather than lost or reprocessed out of order.
+
+  Each test creates its own uniquely named topic and consumer group (cleaned up via `t.Cleanup`), so tests can
+  run in parallel against the same shared Kafka container.
+
 ## Tech Stack
 
 - Language: Go
@@ -185,13 +205,7 @@ kubectl apply -R -f examples/deploy/k8s/
 
 ```shell
 kubectl port-forward -n saga-go service/kafka-ui 8080:8080   # Kafka UI
-```
-
-```shell
 kubectl port-forward -n saga-go service/mailhog 8025:8025    # MailHog UI
-```
-
-```shell
 kubectl port-forward -n saga-go service/lgtm 3000:3000       # Grafana UI
 ```
 
