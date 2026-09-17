@@ -21,6 +21,7 @@ PostgreSQL and Kafka operators).
 - [Testing](#testing)
 - [Tech Stack](#tech-stack)
 - [Observability](#observability)
+- [Configuration](#configuration)
 - [Deployment](#deployment)
     - [Docker Compose](#docker-compose)
     - [Kubernetes](#kubernetes)
@@ -137,6 +138,76 @@ Both the `register`/`unregister` commands and the `raise`/`clear` alarm commands
 
 Each component is instrumented with OpenTelemetry, so a single transaction can be traced end-to-end — from
 initial registration in `tx-producer`, through aggregation and validation, to any resulting alarm email.
+
+## Configuration
+
+Each component is configured entirely through environment variables (see `examples/internal/config/`); the
+Docker Compose file sets all of them for local use.
+
+### tx-producer
+
+| Variable                                      | Description                                                               |
+|-----------------------------------------------|---------------------------------------------------------------------------|
+| `TX_PRODUCER_OTEL_COLLECTOR_HOST`             | OTel collector address                                                    |
+| `TX_PRODUCER_OTEL_SERVICE_NAME`               | Service name reported to tracing (default `tx-producer`)                  |
+| `TX_PRODUCER_KAFKA_SEEDS`                     | Kafka seed brokers                                                        |
+| `TX_PRODUCER_KAFKA_TRANSACTIONS_TOPIC`        | Topic to publish registration commands to                                 |
+| `TX_PRODUCER_PRODUCE_AMOUNT`                  | Number of commands to generate                                            |
+| `TX_PRODUCER_PRODUCE_POISON_PILL_AMOUNT`      | Number of intentionally unprocessable ("poison pill") commands to include |
+| `TX_PRODUCER_PRODUCE_RATE`                    | Commands produced per second                                              |
+| `TX_PRODUCER_GENERATOR_CURRENCIES`            | Comma-separated currencies to generate transactions in                    |
+| `TX_PRODUCER_GENERATOR_PLAYER_ID_AMOUNT`      | Number of distinct player IDs to generate                                 |
+| `TX_PRODUCER_GENERATOR_TRANSACTION_ID_AMOUNT` | Number of distinct transaction IDs to generate                            |
+| `TX_PRODUCER_GENERATOR_DAYS_AMOUNT`           | Number of distinct days to spread transactions across                     |
+| `TX_PRODUCER_GENERATOR_MAX_VALUE`             | Maximum transaction value to generate                                     |
+
+### tx-consumer
+
+| Variable                                              | Description                                              |
+|-------------------------------------------------------|----------------------------------------------------------|
+| `TX_CONSUMER_OTEL_COLLECTOR_HOST`                     | OTel collector address                                   |
+| `TX_CONSUMER_OTEL_SERVICE_NAME`                       | Service name reported to tracing (default `tx-consumer`) |
+| `TX_CONSUMER_DATABASE_URL`                            | Postgres connection string                               |
+| `TX_CONSUMER_KAFKA_SEEDS`                             | Kafka seed brokers                                       |
+| `TX_CONSUMER_KAFKA_TRANSACTIONS_TOPIC`                | Transactions topic to consume                            |
+| `TX_CONSUMER_KAFKA_TRANSACTIONS_DLQ_TOPIC`            | DLQ topic for unprocessable transaction records          |
+| `TX_CONSUMER_KAFKA_TRANSACTIONS_TOPIC_CONSUMER_GROUP` | Consumer group ID                                        |
+| `TX_CONSUMER_KAFKA_ALARM_TOPIC`                       | Topic to publish raise/clear alarm commands to           |
+| `TX_CONSUMER_KAFKA_CONSUMER_COUNT`                    | Number of concurrent consumer instances                  |
+| `TX_CONSUMER_ALARM_VALUE`                             | Aggregate value limit that triggers an alarm             |
+
+### tx-validator
+
+| Variable                                               | Description                                                                  |
+|--------------------------------------------------------|------------------------------------------------------------------------------|
+| `TX_VALIDATOR_OTEL_COLLECTOR_HOST`                     | OTel collector address                                                       |
+| `TX_VALIDATOR_OTEL_SERVICE_NAME`                       | Service name reported to tracing (default `tx-validator`)                    |
+| `TX_VALIDATOR_DATABASE_URL`                            | Postgres connection string                                                   |
+| `TX_VALIDATOR_KAFKA_SEEDS`                             | Kafka seed brokers                                                           |
+| `TX_VALIDATOR_KAFKA_TRANSACTIONS_TOPIC`                | Transactions topic to consume                                                |
+| `TX_VALIDATOR_KAFKA_TRANSACTIONS_DLQ_TOPIC`            | DLQ topic for unprocessable transaction records                              |
+| `TX_VALIDATOR_KAFKA_TRANSACTIONS_TOPIC_CONSUMER_GROUP` | Consumer group ID                                                            |
+| `TX_VALIDATOR_KAFKA_CONSUMER_COUNT`                    | Number of concurrent consumer instances                                      |
+| `TX_VALIDATOR_KAFKA_COMPENSATE_PERCENT`                | Percentage of transactions to intentionally fail validation (and compensate) |
+
+### mail-sender
+
+| Variable                                        | Description                                              |
+|-------------------------------------------------|----------------------------------------------------------|
+| `MAIL_SENDER_OTEL_COLLECTOR_HOST`               | OTel collector address                                   |
+| `MAIL_SENDER_OTEL_SERVICE_NAME`                 | Service name reported to tracing (default `mail-sender`) |
+| `MAIL_SENDER_DATABASE_URL`                      | Postgres connection string                               |
+| `MAIL_SENDER_KAFKA_SEEDS`                       | Kafka seed brokers                                       |
+| `MAIL_SENDER_KAFKA_ALARMS_TOPIC`                | Alarms topic to consume                                  |
+| `MAIL_SENDER_KAFKA_ALARMS_DLQ_TOPIC`            | DLQ topic for unprocessable alarm records                |
+| `MAIL_SENDER_KAFKA_ALARMS_TOPIC_CONSUMER_GROUP` | Consumer group ID                                        |
+| `MAIL_SENDER_KAFKA_CONSUMER_COUNT`              | Number of concurrent consumer instances                  |
+| `MAIL_SENDER_SMTP_HOST`                         | SMTP host                                                |
+| `MAIL_SENDER_SMTP_PORT`                         | SMTP port (default `587`)                                |
+| `MAIL_SENDER_SMTP_USERNAME`                     | SMTP username                                            |
+| `MAIL_SENDER_SMTP_PASSWORD`                     | SMTP password                                            |
+| `MAIL_SENDER_MAIL_FROM`                         | From address for alarm emails                            |
+| `MAIL_SENDER_MAIL_TO`                           | To address for alarm emails                              |
 
 ## Deployment
 
