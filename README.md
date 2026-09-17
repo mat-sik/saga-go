@@ -11,16 +11,16 @@ PostgreSQL and Kafka operators).
 ## Table of Contents
 
 - [Overview](#overview)
-- [Library Packages](#library-packages)
+- [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
     - [tx-producer](#tx-producer)
     - [tx-consumer](#tx-consumer)
     - [tx-validator](#tx-validator)
     - [mail-sender](#mail-sender)
 - [Saga Flow](#saga-flow)
-- [Testing](#testing)
-- [Tech Stack](#tech-stack)
+- [Library Packages](#library-packages)
 - [Observability](#observability)
+- [Testing](#testing)
 - [Configuration](#configuration)
 - [Deployment](#deployment)
     - [Docker Compose](#docker-compose)
@@ -34,27 +34,13 @@ an aggregate exceeds a configured limit, an alarm is raised and an email is sent
 is later compensated, the alarm is cleared and a follow-up email is sent. Unsuccessful validation triggers the
 saga's compensating flow, unwinding the transaction.
 
-## Library Packages
+## Tech Stack
 
-Three standalone packages. Only `kgoconsumer` is Kafka-specific; `idempotent` and `saga` are transport-agnostic (generic
-over the message type) and don't depend on `kgoconsumer` at all - in the example app they're wired to
-it by passing a `kgoconsumer.RecordConsumer` function that delegates into an `idempotent.Consumer` or
-`saga.Consumer`, but either could just as easily wrap a different message source.
-
-- **`kgoconsumer`** - a Kafka consumer built on [franz-go](https://github.com/twmb/franz-go). Polls records and
-  retries a record on transient errors (`ErrTransient`) with backoff for a configurable duration; any other
-  error is treated as permanent and the record is published to a DLQ topic straight away. Handles partition
-  rebalances gracefully - in-flight processing is cancelled when a rebalance blocks, and a cancelled batch is
-  correctly refetched afterward rather than lost or reprocessed out of order.
-- **`idempotent`** - a generic idempotent consumer (`Consumer[T]`). Before running its consumer functions on a
-  message, it asks a `PortOut` whether that message was already handled; if not, it runs them and then marks
-  the message as handled. Has no Kafka dependency - `T` and the `PortOut` implementation are supplied by the
-  caller.
-- **`saga`** - a generic saga consumer (`Consumer[T, CT]`) built around the same already-handled check as
-  `idempotent`, plus one more: for a compensating command it looks up whether the transaction it targets has
-  already been compensated, so a compensating command that arrives before the original transaction is still
-  handled correctly instead of being silently missed. Runs a configurable list of `Action[T, CT]`s (each with
-  `Execute` and `Compensate`) against the resolved transaction or compensating transaction.
+- Language: Go
+- Messaging: Apache Kafka (via franz-go)
+- Database: PostgreSQL
+- Tracing: OpenTelemetry
+- Deployment: Docker Compose, or Kubernetes with Helm
 
 ## Architecture
 
@@ -111,32 +97,27 @@ Both the `register`/`unregister` commands and the `raise`/`clear` alarm commands
 4. If an aggregate crosses its limit, `tx-consumer` publishes an alarm command; `mail-sender` sends the
    corresponding email. Clearing follows the same path in reverse.
 
-## Testing
+## Library Packages
 
-- **Unit tests** cover the pure logic in `kgoconsumer` - `TestBackoff_*` for the retry/backoff calculator,
-  `TestProcessedEpochOffsetsTracker*` for offset-commit bookkeeping, and `TestCancelProcessingStore_*` for the
-  rebalance-cancellation state machine. Run them with `go test ./...` inside each module (`kgoconsumer`,
-  `idempotent`, `saga`, `examples`).
+Three standalone packages. Only `kgoconsumer` is Kafka-specific; `idempotent` and `saga` are transport-agnostic (generic
+over the message type) and don't depend on `kgoconsumer` at all - in the example app they're wired to
+it by passing a `kgoconsumer.RecordConsumer` function that delegates into an `idempotent.Consumer` or
+`saga.Consumer`, but either could just as easily wrap a different message source.
 
-- **Integration tests** for `kgoconsumer` (`kgoconsumer/test/`) spin up a real
-  Kafka broker with [testcontainers-go](https://github.com/testcontainers/testcontainers-go)
-  (`confluentinc/confluent-local`) in `TestMain`, then produce and consume against it with `franz-go` directly.
-  They exercise:
-    - `TestConsumption` - records are actually processed end-to-end through the consumer.
-    - `TestRebalance` / `TestRebalance_CancelledBatchIsRefetchedWithoutRevoke` - verify that `kgoconsumer` handles
-      Kafka partition rebalances gracefully: in-flight processing is cancelled when a rebalance blocks, and a
-      cancelled batch is correctly refetched afterward rather than lost or reprocessed out of order.
-
-  Each test creates its own uniquely named topic and consumer group (cleaned up via `t.Cleanup`), so tests can
-  run in parallel against the same shared Kafka container.
-
-## Tech Stack
-
-- Language: Go
-- Messaging: Apache Kafka (via franz-go)
-- Database: PostgreSQL
-- Tracing: OpenTelemetry
-- Deployment: Docker Compose, or Kubernetes with Helm
+- **`kgoconsumer`** - a Kafka consumer built on [franz-go](https://github.com/twmb/franz-go). Polls records and
+  retries a record on transient errors (`ErrTransient`) with backoff for a configurable duration; any other
+  error is treated as permanent and the record is published to a DLQ topic straight away. Handles partition
+  rebalances gracefully - in-flight processing is cancelled when a rebalance blocks, and a cancelled batch is
+  correctly refetched afterward rather than lost or reprocessed out of order.
+- **`idempotent`** - a generic idempotent consumer (`Consumer[T]`). Before running its consumer functions on a
+  message, it asks a `PortOut` whether that message was already handled; if not, it runs them and then marks
+  the message as handled. Has no Kafka dependency - `T` and the `PortOut` implementation are supplied by the
+  caller.
+- **`saga`** - a generic saga consumer (`Consumer[T, CT]`) built around the same already-handled check as
+  `idempotent`, plus one more: for a compensating command it looks up whether the transaction it targets has
+  already been compensated, so a compensating command that arrives before the original transaction is still
+  handled correctly instead of being silently missed. Runs a configurable list of `Action[T, CT]`s (each with
+  `Execute` and `Compensate`) against the resolved transaction or compensating transaction.
 
 ## Observability
 
@@ -162,6 +143,25 @@ topic into `tx-consumer`/`tx-validator`, and again as an alarm command crosses t
 ![OTel trace](figures/otel-trace.png)
 
 ![grafana service graph](figures/grafana-service-graph.png)
+
+## Testing
+
+- **Unit tests** cover the pure logic in `kgoconsumer` - `TestBackoff_*` for the retry/backoff calculator,
+  `TestProcessedEpochOffsetsTracker*` for offset-commit bookkeeping, and `TestCancelProcessingStore_*` for the
+  rebalance-cancellation state machine. Run them with `go test ./...` inside each module (`kgoconsumer`,
+  `idempotent`, `saga`, `examples`).
+
+- **Integration tests** for `kgoconsumer` (`kgoconsumer/test/`) spin up a real
+  Kafka broker with [testcontainers-go](https://github.com/testcontainers/testcontainers-go)
+  (`confluentinc/confluent-local`) in `TestMain`, then produce and consume against it with `franz-go` directly.
+  They exercise:
+    - `TestConsumption` - records are actually processed end-to-end through the consumer.
+    - `TestRebalance` / `TestRebalance_CancelledBatchIsRefetchedWithoutRevoke` - verify that `kgoconsumer` handles
+      Kafka partition rebalances gracefully: in-flight processing is cancelled when a rebalance blocks, and a
+      cancelled batch is correctly refetched afterward rather than lost or reprocessed out of order.
+
+  Each test creates its own uniquely named topic and consumer group (cleaned up via `t.Cleanup`), so tests can
+  run in parallel against the same shared Kafka container.
 
 ## Configuration
 
