@@ -3,10 +3,9 @@
 [![CI](https://github.com/mat-sik/saga-go/actions/workflows/ci.yaml/badge.svg)](https://github.com/mat-sik/saga-go/actions)
 [![License](https://img.shields.io/github/license/mat-sik/saga-go)](https://github.com/mat-sik/saga-go/blob/main/LICENSE)
 
-An example event-driven system implementing a **choreography-based Saga** (not orchestrated) for distributed
-transaction processing, plus the reusable Kafka consumer libraries it's built on. OpenTelemetry tracing runs
-through the full saga flow, and the example app can be deployed via Docker Compose or Kubernetes (Helm charts,
-PostgreSQL and Kafka operators).
+An event-driven system implementing a **choreography-based Saga** for distributed transaction processing. 
+OpenTelemetry tracing runs through the full saga flow, and the system can be deployed via Docker Compose or 
+Kubernetes (Helm charts, PostgreSQL and Kafka operators).
 
 ## Table of Contents
 
@@ -29,7 +28,7 @@ PostgreSQL and Kafka operators).
 
 ## Overview
 
-The example app registers and validates financial transactions, aggregated per player, date, and currency. When
+The system registers and validates financial transactions, aggregated per player, date, and currency. When
 an aggregate exceeds a configured limit, an alarm is raised and an email is sent; if the triggering transaction
 is later compensated, the alarm is cleared and a follow-up email is sent. Unsuccessful validation triggers the
 saga's compensating flow, unwinding the transaction.
@@ -40,11 +39,12 @@ saga's compensating flow, unwinding the transaction.
 - Messaging: Apache Kafka (via franz-go)
 - Database: PostgreSQL
 - Tracing: OpenTelemetry
+- Testing: TestContainers
 - Deployment: Docker Compose, or Kubernetes with Helm
 
 ## Architecture
 
-The project is composed of four components. Each component follows **hexagonal (ports and adapters)
+The system is composed of four components. Each component follows **hexagonal (ports and adapters)
 architecture**: its domain layer (`internal/domain/`) holds the core saga/aggregation logic fully decoupled
 from any framework or infrastructure concern, and is driven and served entirely through ports implemented by
 adapters (`internal/adapters/kafka`, `.../postgres`, `.../mail`, `.../static`) for Kafka, Postgres, e-mail, and
